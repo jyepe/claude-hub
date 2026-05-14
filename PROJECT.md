@@ -74,7 +74,9 @@ The entire surface area of Claude Code's on-disk state. **No private APIs needed
 ### Critical JSONL parsing notes
 
 - **Dedupe by UUID.** Claude Code writes the same event to multiple JSONLs during branching/resumption. Naive token summing inflates totals by 2–4×. Always `HashSet` the UUIDs.
-- **Token usage** lives on `assistant`-type events under `message.usage`. The four keys to sum: `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`.
+- **Token usage** lives on `assistant`-type events under `message.usage`. Two separate quantities derived from these fields:
+  - **Lifetime tokens** — sum all four (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`) across every assistant turn. Use for billing/usage rollups (header tiles, 7d / all-time totals). Long sessions naturally reach millions because cache-read is re-counted each turn.
+  - **Context-window fill** — prompt size of the **latest** assistant turn only: `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` (no output). Use for the per-session meter and the tray tooltip. "Latest" = max event `timestamp`; do not rely on file order, since branching/resumption interleaves writes.
 - **Model** lives on `message.model` of assistant events. First one wins (sessions occasionally switch models mid-conversation).
 - **Title** = first `user`-type event's `message.content` (string or first text block), truncated to ~80 chars.
 - **Project path decoding** — the dash-encoded folder is _mostly_ reversible by replacing `-` with `/`, but breaks for paths with literal dashes in directory names. Probably fine for v0.1; revisit if it bites.

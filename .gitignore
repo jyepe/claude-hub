@@ -25,3 +25,9 @@ dist-ssr
 
 
 superpowers
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Cygwin/MSYS stack dumps
+*.stackdump
