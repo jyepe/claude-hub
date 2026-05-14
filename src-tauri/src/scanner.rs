@@ -49,4 +49,24 @@ mod tests {
     fn scan_all_does_not_panic_when_dirs_missing() {
         let _ = scan_all();
     }
+
+    #[test]
+    fn parse_one_returns_session_for_unreadable_lines() {
+        use std::io::Write;
+        let tmp = std::env::temp_dir().join(format!(
+            "claude-hub-scanner-{}-{}.jsonl",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut f = std::fs::File::create(&tmp).unwrap();
+        writeln!(f, "not json").unwrap();
+        writeln!(f, "{{\"broken\":").unwrap();
+        let cache = std::env::temp_dir().join("claude-hub-scanner-cache");
+        let _ = std::fs::create_dir_all(&cache);
+        let s = parse_one(&tmp, &cache).unwrap();
+        assert_eq!(s.tokens, 0);
+    }
 }

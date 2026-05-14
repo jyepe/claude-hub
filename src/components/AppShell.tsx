@@ -10,9 +10,19 @@ import { HiddenProjectsManager } from "./HiddenProjectsManager";
 export function AppShell() {
   const projectsFetcher = useCallback(() => api.listProjects(), []);
   const statsFetcher = useCallback(() => api.getStats(), []);
-  const { data: projects, refresh: refreshProjects, lastRefresh } =
-    usePoll<Project[]>(projectsFetcher);
-  const { data: stats, refresh: refreshStats } = usePoll<Stats>(statsFetcher);
+  const {
+    data: projects,
+    refresh: refreshProjects,
+    lastRefresh,
+    error: projectsError,
+  } = usePoll<Project[]>(projectsFetcher);
+  const { data: stats, refresh: refreshStats, error: statsError } =
+    usePoll<Stats>(statsFetcher);
+
+  const errorMessage =
+    (projectsError as Error | null)?.toString() ??
+    (statsError as Error | null)?.toString() ??
+    null;
 
   const refreshAll = useCallback(() => {
     refreshProjects();
@@ -38,6 +48,11 @@ export function AppShell() {
         </div>
       </header>
 
+      {errorMessage && (
+        <div className="px-4 py-2 border border-danger rounded-md bg-surface text-danger text-sm">
+          {errorMessage}
+        </div>
+      )}
       <HeaderStats stats={stats} />
 
       <main className="flex flex-col gap-3">
