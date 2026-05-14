@@ -6,6 +6,7 @@ mod projects;
 mod scanner;
 mod sessions;
 mod stats;
+mod terminal;
 mod worktree;
 
 #[tauri::command]
