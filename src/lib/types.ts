@@ -6,6 +6,7 @@ export interface Session {
   model: string | null;
   message_count: number;
   tokens: number;
+  context_tokens: number;
   last_activity: string | null;
 }
 

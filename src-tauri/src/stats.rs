@@ -67,6 +67,7 @@ mod tests {
             model: None,
             message_count: 0,
             tokens,
+            context_tokens: 0,
             last_activity: Some(Utc::now() - chrono::Duration::days(days_ago)),
         }
     }

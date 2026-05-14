@@ -1,7 +1,31 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Skill(superpowers:using-git-worktrees)",
+      "Bash(git checkout *)",
+      "PowerShell(npm install *)",
+      "Bash(git rm *)",
+      "PowerShell(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(git *)",
+      "Bash(npm install *)",
+      "Bash(npm test *)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(time cargo build --manifest-path src-tauri/Cargo.toml)",
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(rustup --version)",
+      "Bash(cargo build *)",
+      "Bash(rustup show *)",
+      "Bash(rustup update *)",
+      "Bash(rustup default *)",
+      "Bash(cargo test *)",
+      "Bash(npx tsc *)",
+      "Bash(powershell -c \"Get-Content src/index.css -Tail 25\")"
     ]
   }
 }

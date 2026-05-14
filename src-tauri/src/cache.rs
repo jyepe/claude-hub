@@ -93,6 +93,7 @@ mod tests {
             model: None,
             message_count: 0,
             tokens: 42,
+            context_tokens: 0,
             last_activity: None,
         };
         write(&cache, &jsonl, &s).unwrap();
@@ -113,6 +114,7 @@ mod tests {
             model: None,
             message_count: 0,
             tokens: 1,
+            context_tokens: 0,
             last_activity: None,
         };
         write(&cache, &jsonl, &s).unwrap();

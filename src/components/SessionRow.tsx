@@ -30,13 +30,13 @@ export function SessionRow({ session, cwd }: Props) {
           {session.title ?? "(no prompt yet)"}
         </div>
         <div className="font-mono text-[11px] text-text-3 truncate">
-          {session.model ?? "—"} · {session.message_count} msgs · {formatTokens(session.tokens)} tok
+          {session.model ?? "—"} · {session.message_count} msgs · {formatTokens(session.tokens)} tok lifetime
         </div>
       </div>
       <span className="text-text-3 text-xs whitespace-nowrap">
         {formatTimeAgo(session.last_activity)}
       </span>
-      <ContextMeter tokens={session.tokens} window={window} />
+      <ContextMeter tokens={session.context_tokens} window={window} />
       <button
         type="button"
         onClick={() => api.openSession(cwd, session.id).catch(console.error)}

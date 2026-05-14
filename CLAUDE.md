@@ -46,7 +46,10 @@ The frontend is **read-only over Claude Code's on-disk state**. Hub does not wri
 These are the easy-to-miss decisions that will hurt if violated:
 
 - **Dedupe JSONL events by UUID before summing tokens.** Claude Code writes the same event to multiple JSONLs during branching/resumption — naive sums inflate by 2–4×.
-- **Token usage** lives on `assistant` events under `message.usage`. Sum all four: `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`.
+- **Two distinct token quantities — don't confuse them:**
+  - **Lifetime tokens (`Session.tokens`)** — sum of all four `message.usage` fields (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`) across every assistant event. This is a billed/usage metric. Long sessions reach millions because `cache_read_input_tokens` is re-counted every turn. Used for header stats (7d / all-time) and per-project rollups.
+  - **Context-window fill (`Session.context_tokens`)** — prompt size of the **latest** (by timestamp) assistant turn: `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` (output is excluded — it's produced by the call, not part of its prompt). This is what feeds `ContextMeter` and the tray tooltip. Capped by the model's window (200k / 1M).
+  - Never feed the lifetime sum to the context meter — it will peg at 100% on any moderately long session.
 - **Never display MCP env values** in the UI. Show env *keys* only. Treat `~/.claude.json` as containing secrets.
 - **No pills, no gradients in chrome.** The only gradient in the entire UI is the context meter's fill. The only `9999px` radius use is — none. See `DESIGN.md` "Shapes".
 - **Stay on the 4px spacing grid** (`4, 8, 12, 16, 20, 24, 32, 40, 48, 64`). Never `6, 10, 14, 18`.
