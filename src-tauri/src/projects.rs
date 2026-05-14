@@ -55,14 +55,19 @@ pub fn group(sessions: Vec<Session>, prefs: &Prefs) -> Vec<Project> {
     }
 
     let mut out = Vec::new();
-    for (path, sessions) in roots {
+    for (path, mut sessions) in roots {
+        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+
         let mut wts: Vec<Worktree> = wt_assignments
             .remove(&path)
             .unwrap_or_default()
             .into_iter()
-            .map(|(p, s)| Worktree {
-                path: p.to_string_lossy().into_owned(),
-                sessions: s,
+            .map(|(p, mut s)| {
+                s.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+                Worktree {
+                    path: p.to_string_lossy().into_owned(),
+                    sessions: s,
+                }
             })
             .collect();
         wts.sort_by(|a, b| a.path.cmp(&b.path));
@@ -139,6 +144,7 @@ mod tests {
             model: None,
             message_count: 1,
             tokens,
+            context_tokens: 0,
             last_activity: Some(Utc.timestamp_opt(t, 0).single().unwrap()),
         }
     }
@@ -177,6 +183,19 @@ mod tests {
         let sessions = vec![make("a", "/p/x", 1, 1), make("b", "/p/x", 2, 2)];
         let projects = group(sessions, &prefs);
         assert!(projects[0].hidden);
+    }
+
+    #[test]
+    fn sessions_within_project_sorted_by_last_activity_desc() {
+        let prefs = Prefs { noise_threshold: 0, ..Default::default() };
+        let sessions = vec![
+            make("old", "/p/proj", 1, 100),
+            make("mid", "/p/proj", 1, 500),
+            make("new", "/p/proj", 1, 999),
+        ];
+        let projects = group(sessions, &prefs);
+        let ids: Vec<&str> = projects[0].sessions.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["new", "mid", "old"]);
     }
 
     #[test]
