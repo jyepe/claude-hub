@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod cache;
 mod paths;
+mod prefs;
 mod scanner;
 mod sessions;
 
