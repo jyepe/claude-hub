@@ -3,7 +3,7 @@ use crate::sessions::Session;
 use crate::worktree;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,6 +16,7 @@ pub struct Project {
     pub sessions: Vec<Session>,
     pub worktrees: Vec<Worktree>,
     pub hidden: bool,
+    pub used_1m_recently: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,7 +25,16 @@ pub struct Worktree {
     pub sessions: Vec<Session>,
 }
 
-pub fn group(sessions: Vec<Session>, prefs: &Prefs) -> Vec<Project> {
+pub fn normalize_project_path(p: &Path) -> String {
+    let s: String = p.to_string_lossy().replace('\\', "/");
+    if cfg!(target_os = "windows") {
+        s.to_lowercase()
+    } else {
+        s
+    }
+}
+
+pub fn group(sessions: Vec<Session>, prefs: &Prefs, used_1m_paths: &HashSet<String>) -> Vec<Project> {
     let mut by_path: BTreeMap<PathBuf, Vec<Session>> = BTreeMap::new();
     for s in sessions {
         let cwd = match s.cwd.as_deref() {
@@ -88,6 +98,7 @@ pub fn group(sessions: Vec<Session>, prefs: &Prefs) -> Vec<Project> {
         let path_str = path.to_string_lossy().into_owned();
         let hidden = prefs.hidden_projects.contains(&path_str)
             || total_sessions < prefs.noise_threshold;
+        let used_1m_recently = used_1m_paths.contains(&normalize_project_path(&path));
 
         out.push(Project {
             display_name: path
@@ -101,6 +112,7 @@ pub fn group(sessions: Vec<Session>, prefs: &Prefs) -> Vec<Project> {
             sessions,
             worktrees: wts,
             hidden,
+            used_1m_recently,
         });
     }
     out.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
@@ -145,8 +157,15 @@ mod tests {
             message_count: 1,
             tokens,
             context_tokens: 0,
+            max_prompt_tokens: 0,
             last_activity: Some(Utc.timestamp_opt(t, 0).single().unwrap()),
+            live_context_window: None,
+            live_model_id: None,
         }
+    }
+
+    fn empty_1m() -> HashSet<String> {
+        HashSet::new()
     }
 
     #[test]
@@ -157,7 +176,7 @@ mod tests {
             make("b", "/p/one", 20, 200),
             make("c", "/p/two", 5, 50),
         ];
-        let projects = group(sessions, &prefs);
+        let projects = group(sessions, &prefs, &empty_1m());
         assert_eq!(projects.len(), 2);
         let one = projects.iter().find(|p| p.path == "/p/one").unwrap();
         assert_eq!(one.session_count, 2);
@@ -171,7 +190,7 @@ mod tests {
             ..Default::default()
         };
         let sessions = vec![make("a", "/p/lonely", 1, 1)];
-        let projects = group(sessions, &prefs);
+        let projects = group(sessions, &prefs, &empty_1m());
         assert!(projects[0].hidden);
     }
 
@@ -181,7 +200,7 @@ mod tests {
         prefs.hidden_projects.insert("/p/x".into());
         prefs.noise_threshold = 0;
         let sessions = vec![make("a", "/p/x", 1, 1), make("b", "/p/x", 2, 2)];
-        let projects = group(sessions, &prefs);
+        let projects = group(sessions, &prefs, &empty_1m());
         assert!(projects[0].hidden);
     }
 
@@ -193,7 +212,7 @@ mod tests {
             make("mid", "/p/proj", 1, 500),
             make("new", "/p/proj", 1, 999),
         ];
-        let projects = group(sessions, &prefs);
+        let projects = group(sessions, &prefs, &empty_1m());
         let ids: Vec<&str> = projects[0].sessions.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["new", "mid", "old"]);
     }
@@ -208,7 +227,28 @@ mod tests {
             make("a", "/p/old", 1, 100),
             make("b", "/p/new", 1, 9999),
         ];
-        let projects = group(sessions, &prefs);
+        let projects = group(sessions, &prefs, &empty_1m());
         assert_eq!(projects[0].path, "/p/new");
+    }
+
+    #[test]
+    fn marks_project_when_path_in_1m_set() {
+        let prefs = Prefs { noise_threshold: 0, ..Default::default() };
+        let sessions = vec![make("a", "/p/one", 1, 1)];
+        let mut hint = HashSet::new();
+        hint.insert("/p/one".to_string());
+        let projects = group(sessions, &prefs, &hint);
+        assert!(projects[0].used_1m_recently);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn normalizes_path_for_1m_match_on_windows() {
+        let prefs = Prefs { noise_threshold: 0, ..Default::default() };
+        let sessions = vec![make("a", "C:\\Users\\Foo\\Proj", 1, 1)];
+        let mut hint = HashSet::new();
+        hint.insert("c:/users/foo/proj".to_string());
+        let projects = group(sessions, &prefs, &hint);
+        assert!(projects[0].used_1m_recently);
     }
 }

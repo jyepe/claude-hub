@@ -1,10 +1,12 @@
 mod cache;
+mod claude_config;
 mod paths;
 mod prefs;
 mod projects;
 mod scanner;
 mod sessions;
 mod stats;
+mod statusline_cache;
 mod terminal;
 mod worktree;
 
@@ -18,6 +20,20 @@ struct AppState {
     prefs_lock: Mutex<()>,
 }
 
+fn apply_live_overlay(sessions: &mut [sessions::Session]) {
+    let live = statusline_cache::read_all();
+    if live.is_empty() { return; }
+    for s in sessions {
+        let Some(entry) = live.get(&s.id) else { continue; };
+        if let Some(pct) = entry.used_percentage {
+            s.live_context_window = statusline_cache::derive_window(s.context_tokens, pct);
+        }
+        if entry.model_id.is_some() {
+            s.live_model_id = entry.model_id.clone();
+        }
+    }
+}
+
 #[tauri::command]
 async fn list_projects() -> Vec<Project> {
     spawn_blocking(|| {
@@ -25,7 +41,10 @@ async fn list_projects() -> Vec<Project> {
         let prefs = paths::hub_prefs_path()
             .map(|p| prefs::read(&p))
             .unwrap_or_default();
-        projects::group(scanner::scan_all(), &prefs)
+        let used_1m = claude_config::read_used_1m_projects();
+        let mut sessions = scanner::scan_all();
+        apply_live_overlay(&mut sessions);
+        projects::group(sessions, &prefs, &used_1m)
     })
     .await
     .unwrap_or_default()
@@ -38,7 +57,10 @@ async fn get_stats() -> Stats {
         let prefs = paths::hub_prefs_path()
             .map(|p| prefs::read(&p))
             .unwrap_or_default();
-        let projs = projects::group(scanner::scan_all(), &prefs);
+        let used_1m = claude_config::read_used_1m_projects();
+        let mut sessions = scanner::scan_all();
+        apply_live_overlay(&mut sessions);
+        let projs = projects::group(sessions, &prefs, &used_1m);
         stats::aggregate(&projs)
     })
     .await

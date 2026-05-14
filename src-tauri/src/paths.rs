@@ -4,6 +4,11 @@ pub fn home() -> Option<PathBuf> {
     dirs::home_dir()
 }
 
+#[allow(dead_code)]
+pub fn claude_json_path() -> Option<PathBuf> {
+    home().map(|h| h.join(".claude.json"))
+}
+
 pub fn claude_dir() -> Option<PathBuf> {
     home().map(|h| h.join(".claude"))
 }
@@ -20,12 +25,19 @@ pub fn hub_cache_dir() -> Option<PathBuf> {
     hub_dir().map(|h| h.join("cache"))
 }
 
+pub fn hub_ctx_cache_dir() -> Option<PathBuf> {
+    hub_dir().map(|h| h.join("ctx-cache"))
+}
+
 pub fn hub_prefs_path() -> Option<PathBuf> {
     hub_dir().map(|h| h.join("prefs.json"))
 }
 
 pub fn ensure_hub_dirs() -> std::io::Result<()> {
     if let Some(c) = hub_cache_dir() {
+        std::fs::create_dir_all(c)?;
+    }
+    if let Some(c) = hub_ctx_cache_dir() {
         std::fs::create_dir_all(c)?;
     }
     Ok(())

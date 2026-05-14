@@ -94,7 +94,10 @@ mod tests {
             message_count: 0,
             tokens: 42,
             context_tokens: 0,
+            max_prompt_tokens: 0,
             last_activity: None,
+            live_context_window: None,
+            live_model_id: None,
         };
         write(&cache, &jsonl, &s).unwrap();
         let got = read(&cache, &jsonl).unwrap();
@@ -115,7 +118,10 @@ mod tests {
             message_count: 0,
             tokens: 1,
             context_tokens: 0,
+            max_prompt_tokens: 0,
             last_activity: None,
+            live_context_window: None,
+            live_model_id: None,
         };
         write(&cache, &jsonl, &s).unwrap();
 

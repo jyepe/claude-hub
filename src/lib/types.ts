@@ -7,7 +7,10 @@ export interface Session {
   message_count: number;
   tokens: number;
   context_tokens: number;
+  max_prompt_tokens: number;
   last_activity: string | null;
+  live_context_window: number | null;
+  live_model_id: string | null;
 }
 
 export interface Worktree {
@@ -24,6 +27,7 @@ export interface Project {
   sessions: Session[];
   worktrees: Worktree[];
   hidden: boolean;
+  used_1m_recently: boolean;
 }
 
 export interface Stats {

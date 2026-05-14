@@ -55,6 +55,7 @@ mod tests {
             sessions,
             worktrees: vec![],
             hidden,
+            used_1m_recently: false,
         }
     }
 
@@ -68,7 +69,10 @@ mod tests {
             message_count: 0,
             tokens,
             context_tokens: 0,
+            max_prompt_tokens: 0,
             last_activity: Some(Utc::now() - chrono::Duration::days(days_ago)),
+            live_context_window: None,
+            live_model_id: None,
         }
     }
 

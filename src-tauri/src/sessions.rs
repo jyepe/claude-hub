@@ -13,7 +13,14 @@ pub struct Session {
     pub message_count: u32,
     pub tokens: u64,
     pub context_tokens: u64,
+    pub max_prompt_tokens: u64,
     pub last_activity: Option<DateTime<Utc>>,
+    /// Window resolved from the statusline-cache wrapper. When present, the UI
+    /// uses this verbatim instead of inferring a window from the model name.
+    pub live_context_window: Option<u64>,
+    /// Model ID as reported by CC at the statusline tick (may include the
+    /// `[1m]` suffix the JSONL drops). Display-only.
+    pub live_model_id: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -25,6 +32,7 @@ struct Acc {
     message_count: u32,
     tokens: u64,
     context_tokens: u64,
+    max_prompt_tokens: u64,
     latest_assistant_ts: Option<DateTime<Utc>>,
     last_activity: Option<DateTime<Utc>>,
     session_id: Option<String>,
@@ -59,7 +67,10 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         message_count: acc.message_count,
         tokens: acc.tokens,
         context_tokens: acc.context_tokens,
+        max_prompt_tokens: acc.max_prompt_tokens,
         last_activity: acc.last_activity,
+        live_context_window: None,
+        live_model_id: None,
     }
 }
 
@@ -125,6 +136,13 @@ fn absorb(acc: &mut Acc, v: &serde_json::Value) {
                         acc.tokens += n;
                     }
                 }
+                let prompt: u64 = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
+                    .iter()
+                    .filter_map(|k| usage.get(*k).and_then(|n| n.as_u64()))
+                    .sum();
+                if prompt > acc.max_prompt_tokens {
+                    acc.max_prompt_tokens = prompt;
+                }
                 // Context-window fill = prompt size of the latest assistant turn.
                 // Excludes output_tokens (those are produced by the call, not part of its prompt).
                 // For files without timestamps, last-seen wins.
@@ -135,10 +153,6 @@ fn absorb(acc: &mut Acc, v: &serde_json::Value) {
                     (None, Some(_)) => false,
                 };
                 if is_latest {
-                    let prompt: u64 = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
-                        .iter()
-                        .filter_map(|k| usage.get(*k).and_then(|n| n.as_u64()))
-                        .sum();
                     acc.context_tokens = prompt;
                     acc.latest_assistant_ts = event_ts.or(acc.latest_assistant_ts);
                 }
@@ -219,8 +233,22 @@ mod tests {
         let s = parse_session(&pp(), &contents);
         assert_eq!(s.tokens, 122);
         assert_eq!(s.context_tokens, 115);
+        assert_eq!(s.max_prompt_tokens, 115);
         assert_eq!(s.message_count, 1);
         assert_eq!(s.model.as_deref(), Some("claude-opus-4-7"));
+    }
+
+    #[test]
+    fn max_prompt_tokens_tracks_peak_across_turns() {
+        // Turn 1: small prompt.
+        let t1 = r#"{"uuid":"a1","type":"assistant","timestamp":"2026-05-09T03:55:00Z","message":{"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}"#;
+        // Turn 2: huge prompt — bigger than 200k.
+        let t2 = r#"{"uuid":"a2","type":"assistant","timestamp":"2026-05-09T03:56:00Z","message":{"usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":250000}}}"#;
+        // Turn 3 (latest by ts): small again — context_tokens drops but max persists.
+        let t3 = r#"{"uuid":"a3","type":"assistant","timestamp":"2026-05-09T03:57:00Z","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":500}}}"#;
+        let s = parse_session(&pp(), &format!("{}\n{}\n{}\n", t1, t2, t3));
+        assert_eq!(s.context_tokens, 502);
+        assert_eq!(s.max_prompt_tokens, 250001);
     }
 
     #[test]
