@@ -98,6 +98,7 @@ mod tests {
             last_activity: None,
             live_context_window: None,
             live_model_id: None,
+            is_bg_agent: false,
         };
         write(&cache, &jsonl, &s).unwrap();
         let got = read(&cache, &jsonl).unwrap();
@@ -122,6 +123,7 @@ mod tests {
             last_activity: None,
             live_context_window: None,
             live_model_id: None,
+            is_bg_agent: false,
         };
         write(&cache, &jsonl, &s).unwrap();
 

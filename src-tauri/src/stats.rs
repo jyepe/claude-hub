@@ -73,6 +73,7 @@ mod tests {
             last_activity: Some(Utc::now() - chrono::Duration::days(days_ago)),
             live_context_window: None,
             live_model_id: None,
+            is_bg_agent: false,
         }
     }
 

@@ -21,6 +21,10 @@ pub struct Session {
     /// Model ID as reported by CC at the statusline tick (may include the
     /// `[1m]` suffix the JSONL drops). Display-only.
     pub live_model_id: Option<String>,
+    /// True when this session ID appears in ~/.claude/daemon/roster.json —
+    /// i.e., a bg agent is currently running and can be attached to.
+    #[serde(default)]
+    pub is_bg_agent: bool,
 }
 
 #[derive(Debug, Default)]
@@ -71,6 +75,7 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         last_activity: acc.last_activity,
         live_context_window: None,
         live_model_id: None,
+        is_bg_agent: false,
     }
 }
 
