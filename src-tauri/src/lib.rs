@@ -2,6 +2,7 @@
 mod cache;
 mod paths;
 mod prefs;
+mod projects;
 mod scanner;
 mod sessions;
 mod worktree;
