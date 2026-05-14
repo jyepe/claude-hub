@@ -4,6 +4,7 @@ mod paths;
 mod prefs;
 mod scanner;
 mod sessions;
+mod worktree;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
