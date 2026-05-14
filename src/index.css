@@ -38,3 +38,13 @@
 
 html, body, #root { height: 100%; }
 body { margin: 0; }
+
+.meter-fill-ok {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 60%, transparent), var(--ok));
+}
+.meter-fill-warn {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warn) 60%, transparent), var(--warn));
+}
+.meter-fill-danger {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--danger) 60%, transparent), var(--danger));
+}
