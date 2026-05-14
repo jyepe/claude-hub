@@ -92,6 +92,11 @@ fn absorb(acc: &mut Acc, v: &serde_json::Value) {
     }
     let typ = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
     match typ {
+        "ai-title" => {
+            if let Some(t) = v.get("aiTitle").and_then(|t| t.as_str()) {
+                acc.title = Some(t.to_string());
+            }
+        }
         "user" => {
             acc.message_count += 1;
             if acc.title.is_none() {
@@ -257,6 +262,14 @@ mod tests {
             &format!("{}\n", line),
         );
         assert_eq!(s.id, "0b36e159-8022-444a-a9f7-164faaa78e49");
+    }
+
+    #[test]
+    fn ai_title_overrides_first_user_message() {
+        let user = r#"{"uuid":"u1","type":"user","message":{"content":"raw first message"}}"#;
+        let title = r#"{"type":"ai-title","aiTitle":"Claude-generated title"}"#;
+        let s = parse_session(&pp(), &format!("{}\n{}\n", user, title));
+        assert_eq!(s.title.as_deref(), Some("Claude-generated title"));
     }
 
     #[test]
