@@ -5,6 +5,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum SpawnError {
     #[error("no terminal emulator found")]
+    #[allow(dead_code)]
     NoTerminal,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

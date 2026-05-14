@@ -40,7 +40,7 @@ export function SessionRow({ session, cwd }: Props) {
       <button
         type="button"
         onClick={() => api.openSession(cwd, session.id).catch(console.error)}
-        className="px-3 py-1 text-sm rounded-md bg-accent hover:bg-accent-hover text-white"
+        className="px-3 py-1 text-sm rounded-md bg-accent hover:bg-accent-hover text-text-1"
       >
         Open
       </button>
