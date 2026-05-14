@@ -13,6 +13,10 @@ pub fn claude_dir() -> Option<PathBuf> {
     home().map(|h| h.join(".claude"))
 }
 
+pub fn claude_daemon_roster_path() -> Option<PathBuf> {
+    claude_dir().map(|c| c.join("daemon").join("roster.json"))
+}
+
 pub fn claude_projects_dir() -> Option<PathBuf> {
     claude_dir().map(|c| c.join("projects"))
 }
@@ -61,5 +65,12 @@ mod tests {
         ensure_hub_dirs().unwrap();
         ensure_hub_dirs().unwrap();
         assert!(hub_cache_dir().unwrap().exists());
+    }
+
+    #[test]
+    fn daemon_roster_path_resolves() {
+        let p = claude_daemon_roster_path().unwrap();
+        assert!(p.ends_with("roster.json"));
+        assert!(p.to_string_lossy().contains("daemon"));
     }
 }
