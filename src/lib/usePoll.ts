@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function usePoll<T>(fetcher: () => Promise<T>, intervalMs = 30_000) {
   const [data, setData] = useState<T | null>(null);
@@ -16,10 +16,24 @@ export function usePoll<T>(fetcher: () => Promise<T>, intervalMs = 30_000) {
     }
   }, [fetcher]);
 
+  const cancelledRef = useRef(false);
+
   useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, intervalMs);
-    return () => window.clearInterval(id);
+    cancelledRef.current = false;
+    let timerId: number | undefined;
+
+    const poll = async () => {
+      await refresh();
+      if (cancelledRef.current) return;
+      timerId = window.setTimeout(poll, intervalMs);
+    };
+
+    poll();
+
+    return () => {
+      cancelledRef.current = true;
+      if (timerId !== undefined) window.clearTimeout(timerId);
+    };
   }, [refresh, intervalMs]);
 
   return { data, error, lastRefresh, refresh };

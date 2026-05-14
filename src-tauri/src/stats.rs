@@ -2,7 +2,7 @@ use crate::projects::Project;
 use chrono::{Duration, Utc};
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct Stats {
     pub project_count: u32,
     pub session_count: u32,

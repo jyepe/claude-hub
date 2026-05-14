@@ -11,24 +11,38 @@ mod worktree;
 use projects::Project;
 use stats::Stats;
 use std::path::PathBuf;
+use tauri::State;
+use tauri::async_runtime::{Mutex, spawn_blocking};
 
-#[tauri::command]
-fn list_projects() -> Vec<Project> {
-    let _ = paths::ensure_hub_dirs();
-    let prefs = paths::hub_prefs_path()
-        .map(|p| prefs::read(&p))
-        .unwrap_or_default();
-    projects::group(scanner::scan_all(), &prefs)
+struct AppState {
+    prefs_lock: Mutex<()>,
 }
 
 #[tauri::command]
-fn get_stats() -> Stats {
-    let _ = paths::ensure_hub_dirs();
-    let prefs = paths::hub_prefs_path()
-        .map(|p| prefs::read(&p))
-        .unwrap_or_default();
-    let projs = projects::group(scanner::scan_all(), &prefs);
-    stats::aggregate(&projs)
+async fn list_projects() -> Vec<Project> {
+    spawn_blocking(|| {
+        let _ = paths::ensure_hub_dirs();
+        let prefs = paths::hub_prefs_path()
+            .map(|p| prefs::read(&p))
+            .unwrap_or_default();
+        projects::group(scanner::scan_all(), &prefs)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn get_stats() -> Stats {
+    spawn_blocking(|| {
+        let _ = paths::ensure_hub_dirs();
+        let prefs = paths::hub_prefs_path()
+            .map(|p| prefs::read(&p))
+            .unwrap_or_default();
+        let projs = projects::group(scanner::scan_all(), &prefs);
+        stats::aggregate(&projs)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -39,13 +53,15 @@ fn get_prefs() -> prefs::Prefs {
 }
 
 #[tauri::command]
-fn set_prefs(new: prefs::Prefs) -> Result<(), String> {
+async fn set_prefs(new: prefs::Prefs, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.prefs_lock.lock().await;
     let path = paths::hub_prefs_path().ok_or_else(|| "no home dir".to_string())?;
     prefs::write(&path, &new).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn hide_project(path: String) -> Result<(), String> {
+async fn hide_project(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.prefs_lock.lock().await;
     let prefs_path = paths::hub_prefs_path().ok_or_else(|| "no home dir".to_string())?;
     let mut prefs = prefs::read(&prefs_path);
     prefs.hidden_projects.insert(path);
@@ -53,7 +69,8 @@ fn hide_project(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn unhide_project(path: String) -> Result<(), String> {
+async fn unhide_project(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.prefs_lock.lock().await;
     let prefs_path = paths::hub_prefs_path().ok_or_else(|| "no home dir".to_string())?;
     let mut prefs = prefs::read(&prefs_path);
     prefs.hidden_projects.remove(&path);
@@ -70,6 +87,9 @@ fn open_session(cwd: String, resume_id: Option<String>) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(AppState {
+            prefs_lock: Mutex::new(()),
+        })
         .invoke_handler(tauri::generate_handler![
             list_projects,
             get_stats,

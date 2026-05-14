@@ -169,14 +169,25 @@ fn extract_user_text(v: &serde_json::Value) -> Option<String> {
 }
 
 fn strip_xml_tags(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
     let mut out = String::with_capacity(s.len());
-    let mut depth = 0u32;
-    for c in s.chars() {
-        match c {
-            '<' => depth += 1,
-            '>' if depth > 0 => depth -= 1,
-            _ if depth == 0 => out.push(c),
-            _ => {}
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '<' {
+            let next = chars.get(i + 1).copied();
+            let looks_like_tag = matches!(next, Some(ch) if ch.is_ascii_alphabetic() || ch == '/');
+            if looks_like_tag {
+                if let Some(off) = chars[i + 1..].iter().position(|&c| c == '>') {
+                    i += off + 2;
+                    continue;
+                }
+            }
+            out.push(c);
+            i += 1;
+        } else {
+            out.push(c);
+            i += 1;
         }
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -277,6 +288,20 @@ mod tests {
         let user = r#"{"uuid":"u1","type":"user","message":{"content":"<command-message>init</command-message> <command-name>/init</command-name>"}}"#;
         let s = parse_session(&pp(), &format!("{}\n", user));
         assert_eq!(s.title.as_deref(), Some("init /init"));
+    }
+
+    #[test]
+    fn preserves_literal_less_than_when_not_a_tag() {
+        let user = r#"{"uuid":"u1","type":"user","message":{"content":"if x < 10 then continue"}}"#;
+        let s = parse_session(&pp(), &format!("{}\n", user));
+        assert_eq!(s.title.as_deref(), Some("if x < 10 then continue"));
+    }
+
+    #[test]
+    fn preserves_unclosed_bracket() {
+        let user = r#"{"uuid":"u1","type":"user","message":{"content":"User said < hello"}}"#;
+        let s = parse_session(&pp(), &format!("{}\n", user));
+        assert_eq!(s.title.as_deref(), Some("User said < hello"));
     }
 
     #[test]

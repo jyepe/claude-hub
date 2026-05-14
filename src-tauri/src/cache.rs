@@ -50,7 +50,7 @@ pub fn write(cache_dir: &Path, jsonl_path: &Path, session: &Session) -> std::io:
         source_mtime_unix: mtime,
         session: session.clone(),
     };
-    let json = serde_json::to_vec_pretty(&entry)
+    let json = serde_json::to_vec(&entry)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     std::fs::write(cache_file(cache_dir, jsonl_path), json)
 }
