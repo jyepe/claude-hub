@@ -23,6 +23,7 @@ pub struct Session {
     pub live_model_id: Option<String>,
     /// True when this session ID appears in ~/.claude/daemon/roster.json —
     /// i.e., a bg agent is currently running and can be attached to.
+    /// Always `false` when deserialized from cache; overridden by `scanner::scan_all` using the live roster.
     #[serde(default)]
     pub is_bg_agent: bool,
 }

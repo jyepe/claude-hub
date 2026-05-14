@@ -1,6 +1,7 @@
 use crate::cache;
 use crate::paths;
 use crate::sessions::{parse_session, Session};
+use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -45,35 +46,35 @@ fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
     Some(session)
 }
 
-pub fn read_bg_agent_ids() -> std::collections::HashSet<String> {
+fn read_bg_agent_ids() -> HashSet<String> {
     let path = match paths::claude_daemon_roster_path() {
         Some(p) => p,
-        None => return std::collections::HashSet::new(),
+        None => return HashSet::new(),
     };
     parse_bg_agent_ids_from_path(&path)
 }
 
-fn parse_bg_agent_ids_from_path(path: &std::path::Path) -> std::collections::HashSet<String> {
+fn parse_bg_agent_ids_from_path(path: &std::path::Path) -> HashSet<String> {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
-        Err(_) => return std::collections::HashSet::new(),
+        Err(_) => return HashSet::new(),
     };
     parse_bg_agent_ids_from_str(&text)
 }
 
-fn parse_bg_agent_ids_from_str(text: &str) -> std::collections::HashSet<String> {
+fn parse_bg_agent_ids_from_str(text: &str) -> HashSet<String> {
     let v: serde_json::Value = match serde_json::from_str(text) {
         Ok(v) => v,
-        Err(_) => return std::collections::HashSet::new(),
+        Err(_) => return HashSet::new(),
     };
-    let mut ids = std::collections::HashSet::new();
+    let mut ids = HashSet::new();
     collect_ids(&v, &mut ids);
     ids
 }
 
-fn collect_ids(v: &serde_json::Value, out: &mut std::collections::HashSet<String>) {
+fn collect_ids(v: &serde_json::Value, out: &mut HashSet<String>) {
     match v {
-        serde_json::Value::String(s) if is_session_id(s) => {
+        serde_json::Value::String(s) if looks_like_uuid(s) => {
             out.insert(s.clone());
         }
         serde_json::Value::Array(arr) => {
@@ -90,7 +91,7 @@ fn collect_ids(v: &serde_json::Value, out: &mut std::collections::HashSet<String
     }
 }
 
-fn is_session_id(s: &str) -> bool {
+fn looks_like_uuid(s: &str) -> bool {
     if s.len() != 36 {
         return false;
     }
@@ -173,7 +174,7 @@ mod tests {
 
     #[test]
     fn parse_bg_agent_ids_returns_empty_for_missing_file() {
-        let ids = parse_bg_agent_ids_from_path(std::path::Path::new("/nonexistent/roster.json"));
+        let ids = parse_bg_agent_ids_from_path(&std::env::temp_dir().join("__nonexistent_roster_for_test.json"));
         assert!(ids.is_empty());
     }
 }
