@@ -10,4 +10,6 @@ export const api = {
   unhideProject: (path: string) => invoke<void>("unhide_project", { path }),
   openSession: (cwd: string, resumeId?: string) =>
     invoke<void>("open_session", { cwd, resumeId: resumeId ?? null }),
+  attachAgent: (cwd: string, sessionId: string) =>
+    invoke<void>("attach_agent", { cwd, sessionId }),
 };

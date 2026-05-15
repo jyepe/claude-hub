@@ -11,6 +11,7 @@ export interface Session {
   last_activity: string | null;
   live_context_window: number | null;
   live_model_id: string | null;
+  is_bg_agent: boolean;
 }
 
 export interface Worktree {

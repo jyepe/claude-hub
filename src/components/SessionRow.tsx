@@ -66,13 +66,23 @@ export function SessionRow({ session, cwd, projectUsed1m }: Props) {
         {formatTimeAgo(session.last_activity)}
       </span>
       <ContextMeter tokens={session.context_tokens} window={window} />
-      <button
-        type="button"
-        onClick={() => api.openSession(cwd, session.id).catch(console.error)}
-        className="px-3 py-1 text-sm rounded-md bg-accent hover:bg-accent-hover text-text-1"
-      >
-        Open
-      </button>
+      {session.is_bg_agent ? (
+        <button
+          type="button"
+          onClick={() => api.attachAgent(cwd, session.id).catch(console.error)}
+          className="px-3 py-1 text-sm rounded-md bg-accent hover:bg-accent-hover text-text-1"
+        >
+          Attach
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => api.openSession(cwd, session.id).catch(console.error)}
+          className="px-3 py-1 text-sm rounded-md bg-accent hover:bg-accent-hover text-text-1"
+        >
+          Open
+        </button>
+      )}
     </div>
   );
 }
