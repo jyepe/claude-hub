@@ -105,6 +105,12 @@ fn open_session(cwd: String, resume_id: Option<String>) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn attach_agent(cwd: String, session_id: String) -> Result<(), String> {
+    terminal::attach_in_terminal(&PathBuf::from(cwd), &session_id)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -120,6 +126,7 @@ pub fn run() {
             hide_project,
             unhide_project,
             open_session,
+            attach_agent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
