@@ -74,8 +74,12 @@ fn parse_bg_agent_ids_from_str(text: &str) -> HashSet<String> {
 
 fn collect_ids(v: &serde_json::Value, out: &mut HashSet<String>) {
     match v {
-        serde_json::Value::String(s) if looks_like_uuid(s) => {
-            out.insert(s.clone());
+        serde_json::Value::String(s) => {
+            if looks_like_uuid(s) {
+                out.insert(s.clone());
+            } else if let Some(id) = uuid_from_jsonl_path(s) {
+                out.insert(id);
+            }
         }
         serde_json::Value::Array(arr) => {
             for item in arr {
@@ -83,12 +87,21 @@ fn collect_ids(v: &serde_json::Value, out: &mut HashSet<String>) {
             }
         }
         serde_json::Value::Object(map) => {
-            for (_, val) in map {
+            for (key, val) in map {
+                if looks_like_uuid(key) {
+                    out.insert(key.clone());
+                }
                 collect_ids(val, out);
             }
         }
         _ => {}
     }
+}
+
+fn uuid_from_jsonl_path(s: &str) -> Option<String> {
+    let name = s.rsplit(['/', '\\']).next()?;
+    let stem = name.strip_suffix(".jsonl")?;
+    if looks_like_uuid(stem) { Some(stem.to_string()) } else { None }
 }
 
 fn looks_like_uuid(s: &str) -> bool {
@@ -156,6 +169,22 @@ mod tests {
         let json = r#"{"sessions":[{"id":"0b36e159-8022-444a-a9f7-164faaa78e49"}]}"#;
         let ids = parse_bg_agent_ids_from_str(json);
         assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
+    }
+
+    #[test]
+    fn parse_bg_agent_ids_handles_uuid_as_object_key() {
+        // actual roster.json format: {"workers": {"<session-id>": {...}}}
+        let json = r#"{"proto":1,"workers":{"0b36e159-8022-444a-a9f7-164faaa78e49":{"pid":1234}}}"#;
+        let ids = parse_bg_agent_ids_from_str(json);
+        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
+    }
+
+    #[test]
+    fn parse_bg_agent_ids_extracts_id_from_jsonl_path() {
+        // resumed bg sessions store the original session path in launch.sessionId
+        let json = r#"{"workers":{"c48dbaf9":{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","dispatch":{"launch":{"mode":"resume","sessionId":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}}}}}"#;
+        let ids = parse_bg_agent_ids_from_str(json);
+        assert!(ids.contains("1ed07f96-9cff-4d93-a7ca-d5d638aad040"));
     }
 
     #[test]
