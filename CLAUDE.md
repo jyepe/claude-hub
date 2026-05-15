@@ -6,58 +6,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **claude-hub** — a Tauri 2 + React + TypeScript desktop app. A local-first "Mission Control" dashboard for every Claude Code session on the user's machine: project list, session transcripts, MCP servers, installed skills, and a tray icon with live context-window usage on the active session.
 
-The repo is currently the **default Tauri scaffold** (`App.tsx` is the boilerplate greeter, `lib.rs` exposes a `greet` command). Almost nothing in `PROJECT.md` §9's planned structure exists yet. New work is greenfield against that plan, not refactor.
+**Phase 1 (Sessions & Launcher) is complete and on `master`.** The scaffold phase is over — all Rust modules and React components listed below exist and are functional.
 
 ## Source of truth documents
 
-These two files override anything you might infer from the current scaffold. Read them before non-trivial work:
+Read these before non-trivial work:
 
-- **`PROJECT.md`** — vision, phased scope (Phase 1 → 7+), data-source table for `~/.claude/`, JSONL parsing gotchas, cross-platform terminal-spawn matrix, planned `src-tauri/src/` module layout, and v0.1 ship checklist.
-- **`DESIGN.md`** — full design system (Warm Ink palette, Geist typography, 4px spacing scale, restrained-rounded shape language, motion timings, component specs). Frontmatter is machine-readable tokens.
+- **`PROJECT.md`** — vision, phased scope (Phase 1 → 7+), data-source table for `~/.claude/`, JSONL parsing gotchas, cross-platform terminal-spawn matrix, and v0.1 ship checklist.
+- **`DESIGN.md`** — full design system (Warm Ink palette, Geist typography, 4px spacing scale, shape language, motion timings, component specs). Frontmatter is machine-readable tokens.
 
 If a request conflicts with these docs, surface the conflict before coding.
 
 ## Commands
 
 ```powershell
-npm install              # first-time setup (also runs cargo fetch via tauri build.rs on dev)
-npm run tauri dev        # start the desktop app (spawns Vite on :1420 + Tauri shell)
-npm run dev              # Vite only — useful for pure-frontend iteration in a browser
+npm install              # first-time setup
+npm run tauri dev        # start the desktop app (Vite :1420 + Tauri shell)
+npm run dev              # Vite only — frontend iteration in a browser
 npm run build            # tsc type-check + vite production build (frontend only)
-npm run tauri build      # produce signed/unsigned native bundle (Phase-12 territory)
+npm test                 # run frontend tests (vitest)
+npm run test:watch       # vitest in watch mode
+```
+
+```powershell
+# Rust tests (run from src-tauri/)
+cargo test                          # all tests
+cargo test scanner                  # tests in a specific module
+cargo test looks_like_uuid          # single test by name substring
 ```
 
 Notes:
-- Vite port **1420 is fixed** (`vite.config.ts` uses `strictPort: true`) because Tauri's `devUrl` hardcodes it. Don't change one without the other.
-- There is no test runner, linter, or formatter configured yet. If you add one, prefer the ecosystem default (vitest, eslint, prettier) and update this file.
-- Rust changes recompile on save during `tauri dev`; they're slower than frontend HMR — be patient on the first build.
+- Vite port **1420 is fixed** (`vite.config.ts` `strictPort: true`) — Tauri's `devUrl` hardcodes it.
+- Rust changes recompile on save during `tauri dev`; first build is slow.
 
-## Architecture (intended)
+## Architecture
 
-Two processes communicate via Tauri's `invoke` bridge:
+Two processes communicate over Tauri's `invoke` bridge. The frontend never touches the filesystem directly.
 
-- **Rust backend (`src-tauri/src/`)** owns all filesystem I/O against `~/.claude/`, terminal spawning, the `notify` file watcher, and the system tray. Planned modules per `PROJECT.md` §9: `sessions.rs`, `terminal.rs`, `mcp.rs`, `skills.rs`, `stats.rs`, `watcher.rs`, `tray.rs`. Register commands in `lib.rs`.
-- **React frontend (`src/`)** is a pure dashboard view. All data flows through `src/lib/api.ts` (Tauri invoke wrappers) — components must not call `invoke` directly. Types live in `src/lib/types.ts`, formatters in `src/lib/format.ts`.
+### Rust backend (`src-tauri/src/`)
 
-The frontend is **read-only over Claude Code's on-disk state**. Hub does not write into `~/.claude/` (no transcript editing, no settings mutation in v0.1).
+| Module | Responsibility |
+|---|---|
+| `lib.rs` | Tauri command registration, `AppState` (holds prefs + statusline cache) |
+| `sessions.rs` | `Session` struct + `parse_session()` — fail-soft per-line JSONL parser |
+| `scanner.rs` | Scans `~/.claude/projects/**/*.jsonl`, calls `parse_session`, marks `is_bg_agent` |
+| `cache.rs` | mtime-validated sidecar cache at `~/.claude-hub/cache/` (keeps relaunches fast) |
+| `projects.rs` | Groups sessions into `Project` structs, applies prefs filters + worktree grouping |
+| `stats.rs` | Aggregates token totals (7-day / all-time) and session/project counts |
+| `paths.rs` | Cross-platform path helpers — `claude_dir()`, `claude_jobs_dir()`, `hub_cache_dir()`, etc. |
+| `prefs.rs` | `~/.claude-hub/prefs.json` (hidden projects set, noise threshold) |
+| `terminal.rs` | Cross-platform terminal spawn: `open_in_terminal` (`claude --resume`) and `attach_in_terminal` (`claude agents attach`) |
+| `worktree.rs` | Detects `.git`-file worktrees and resolves them to their parent repo |
+| `claude_config.rs` | Reads `~/.claude.json` for recently-used projects and per-project model history |
+| `statusline_cache.rs` | Reads `~/.claude-hub/ctx-cache/` for live context % written by the statusline wrapper |
+
+**Data flow for `list_projects`:**
+`invoke("list_projects")` → `lib.rs` → `projects::build_project_list()` → `scanner::scan_all()` → per-file `parse_session()` (hydrated from `cache.rs` if mtime matches)
+
+**Background agent detection** (`scanner.rs`):
+`scan_all()` reads `~/.claude/jobs/*/state.json` after scanning sessions. Each subfolder is one background agent job. It extracts `sessionId` and `linkScanPath` (for resumed sessions where the JSONL UUID differs from the agent's session ID) and sets `Session.is_bg_agent = true` on matching sessions. Regular interactive sessions never have a jobs entry.
+
+### React frontend (`src/`)
+
+All `invoke` calls go through `src/lib/api.ts` — components never call `invoke` directly.
+
+- `lib/types.ts` — shared TS interfaces (`Session`, `Project`, `Stats`, `Prefs`)
+- `lib/format.ts` — token formatting (K/M), time-ago, path display
+- `lib/usePoll.ts` — 30s polling hook used by `AppShell`
+- `components/AppShell.tsx` — root: polls `list_projects` + `get_stats`, passes data down
+- `components/ProjectCard.tsx` — collapsible project row with hide button
+- `components/SessionRow.tsx` — session row with `ContextMeter` and Open/Attach button; `windowFor()` infers the model's context window from multiple signals
+- `components/ContextMeter.tsx` — token-fill bar (green/amber/red thresholds)
+- `components/HeaderStats.tsx` — four stat tiles at the top
+- `components/HiddenProjectsManager.tsx` — modal to unhide projects
+- `components/RefreshButton.tsx` — manual refresh with last-refreshed timestamp
+
+**Open vs Attach:** `SessionRow` renders "Open" (→ `openSession` → `claude --resume <id>`) for normal sessions and "Attach" (→ `attachAgent` → `claude agents attach <id>`) for sessions where `session.is_bg_agent === true`.
 
 ## Load-bearing constraints
 
-These are the easy-to-miss decisions that will hurt if violated:
-
 - **Dedupe JSONL events by UUID before summing tokens.** Claude Code writes the same event to multiple JSONLs during branching/resumption — naive sums inflate by 2–4×.
 - **Two distinct token quantities — don't confuse them:**
-  - **Lifetime tokens (`Session.tokens`)** — sum of all four `message.usage` fields (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`) across every assistant event. This is a billed/usage metric. Long sessions reach millions because `cache_read_input_tokens` is re-counted every turn. Used for header stats (7d / all-time) and per-project rollups.
-  - **Context-window fill (`Session.context_tokens`)** — prompt size of the **latest** (by timestamp) assistant turn: `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` (output is excluded — it's produced by the call, not part of its prompt). This is what feeds `ContextMeter` and the tray tooltip. Capped by the model's window (200k / 1M).
+  - **Lifetime tokens (`Session.tokens`)** — sum of all four `message.usage` fields across every assistant event. Used for header stats.
+  - **Context-window fill (`Session.context_tokens`)** — prompt size of the **latest** assistant turn only: `input + cache_creation + cache_read` (no output). Used for `ContextMeter` and the tray tooltip.
   - Never feed the lifetime sum to the context meter — it will peg at 100% on any moderately long session.
-- **Never display MCP env values** in the UI. Show env *keys* only. Treat `~/.claude.json` as containing secrets.
-- **No pills, no gradients in chrome.** The only gradient in the entire UI is the context meter's fill. The only `9999px` radius use is — none. See `DESIGN.md` "Shapes".
+- **Never display MCP env values** in the UI. Show env *keys* only. `~/.claude.json` contains secrets.
+- **No pills, no gradients in chrome.** The only gradient is the context meter fill. See `DESIGN.md` "Shapes".
 - **Stay on the 4px spacing grid** (`4, 8, 12, 16, 20, 24, 32, 40, 48, 64`). Never `6, 10, 14, 18`.
 - **Pure white (`#fff`) is never used.** `#f5f1ec` is the warm ceiling for primary text in dark mode.
-- **Borders, not shadows, separate planes.** Shadows exist only for floating layers (menus, modals, command palette).
-- **Use `PathBuf` everywhere in Rust**; only stringify at the I/O boundary. Cross-platform path handling matters — this app ships macOS / Linux / Windows from day one.
-- **Debounce file-watcher events to ~250ms per file**, and throttle tray-tooltip updates to ~1s, or live-update churn will dominate CPU.
+- **Borders, not shadows, separate planes.** Shadows only for floating layers (menus, modals).
+- **Use `PathBuf` everywhere in Rust**; only stringify at the I/O boundary.
+- **Debounce file-watcher events to ~250ms per file**, throttle tray tooltip to ~1s (Phase 3/4).
 
 ## Phased scope discipline
 
-`PROJECT.md` §5 sequences the work as Phase 1 → 7+. Don't pull features forward across phase boundaries without an explicit ask — the phasing exists so each phase is independently shippable. The v0.1 bar is Phase 1 + 2 (sessions/launcher + MCP/skills panel); everything else is post-MVP.
+`PROJECT.md` §5 sequences work as Phase 1 → 7+. Don't pull features forward across phase boundaries without an explicit ask. The v0.1 bar is Phase 1 + 2 (sessions/launcher + MCP/skills panel); everything else is post-MVP.
