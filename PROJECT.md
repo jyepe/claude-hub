@@ -82,6 +82,17 @@ The entire surface area of Claude Code's on-disk state. **No private APIs needed
 - **Title** = first `user`-type event's `message.content` (string or first text block), truncated to ~80 chars.
 - **Project path decoding** — the dash-encoded folder is _mostly_ reversible by replacing `-` with `/`, but breaks for paths with literal dashes in directory names. Probably fine for v0.1; revisit if it bites.
 
+### Statusline integration (our own data source)
+
+claude-hub ships a thin statusline wrapper that Claude Code invokes on every tick. The wrapper writes a JSON sidecar at `~/.claude-hub/ctx-cache/{session_id}.json` containing the live `session_id`, `cwd`, `model`, `context_window` (with CC's own `used_percentage`), and an `updated_at_ms` timestamp. The Rust backend reads this directory via `statusline_cache::read_all()` so the hub UI's `ContextMeter` shows the same percentage CC's own bar shows — not an inference from the JSONL.
+
+Two wrappers exist for the same job:
+
+- `scripts/claude-hub-statusline.sh` — bash, used on macOS/Linux/WSL.
+- `scripts/claude-hub-statusline.ps1` — pure PowerShell, used on Windows. Avoids `bash.exe` subprocesses that orphan on Windows ([#8](https://github.com/jyepe/claude-hub/issues/8)).
+
+Full install + verification steps: [`docs/statusline-and-context.md`](docs/statusline-and-context.md).
+
 ---
 
 ## 5. Feature scope — phased
