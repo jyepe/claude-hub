@@ -67,35 +67,42 @@ fn parse_bg_agent_ids_from_str(text: &str) -> HashSet<String> {
         Ok(v) => v,
         Err(_) => return HashSet::new(),
     };
+    let workers = match v.get("workers").and_then(|w| w.as_object()) {
+        Some(w) => w,
+        None => return HashSet::new(),
+    };
     let mut ids = HashSet::new();
-    collect_ids(&v, &mut ids);
-    ids
-}
-
-fn collect_ids(v: &serde_json::Value, out: &mut HashSet<String>) {
-    match v {
-        serde_json::Value::String(s) => {
-            if looks_like_uuid(s) {
-                out.insert(s.clone());
-            } else if let Some(id) = uuid_from_jsonl_path(s) {
-                out.insert(id);
+    for (_, worker) in workers {
+        // Regular interactive sessions use mode "prompt" — skip them.
+        // Background agents use a different mode (e.g. "agent", "task") or have no mode.
+        let mode = worker
+            .get("dispatch")
+            .and_then(|d| d.get("launch"))
+            .and_then(|l| l.get("mode"))
+            .and_then(|m| m.as_str());
+        if mode == Some("prompt") {
+            continue;
+        }
+        if let Some(sid) = worker.get("sessionId").and_then(|s| s.as_str()) {
+            if looks_like_uuid(sid) {
+                ids.insert(sid.to_string());
             }
         }
-        serde_json::Value::Array(arr) => {
-            for item in arr {
-                collect_ids(item, out);
+        // Resumed bg agents store the original session file path in dispatch.launch.sessionId
+        if let Some(launch_sid) = worker
+            .get("dispatch")
+            .and_then(|d| d.get("launch"))
+            .and_then(|l| l.get("sessionId"))
+            .and_then(|s| s.as_str())
+        {
+            if looks_like_uuid(launch_sid) {
+                ids.insert(launch_sid.to_string());
+            } else if let Some(id) = uuid_from_jsonl_path(launch_sid) {
+                ids.insert(id);
             }
         }
-        serde_json::Value::Object(map) => {
-            for (key, val) in map {
-                if looks_like_uuid(key) {
-                    out.insert(key.clone());
-                }
-                collect_ids(val, out);
-            }
-        }
-        _ => {}
     }
+    ids
 }
 
 fn uuid_from_jsonl_path(s: &str) -> Option<String> {
@@ -156,43 +163,57 @@ mod tests {
     }
 
     #[test]
-    fn parse_bg_agent_ids_handles_array_of_strings() {
-        let json = r#"["0b36e159-8022-444a-a9f7-164faaa78e49","aaaabbbb-cccc-dddd-eeee-ffffffffffff"]"#;
+    fn regular_interactive_session_excluded_from_bg_agents() {
+        // Real roster format: interactive sessions have dispatch.launch.mode = "prompt"
+        let json = r#"{
+            "workers": {
+                "f5ec5e6f": {
+                    "sessionId": "f5ec5e6f-84b2-4375-8ed8-a47fcab8ae24",
+                    "dispatch": { "launch": { "mode": "prompt" } }
+                }
+            }
+        }"#;
         let ids = parse_bg_agent_ids_from_str(json);
-        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
-        assert!(ids.contains("aaaabbbb-cccc-dddd-eeee-ffffffffffff"));
-        assert_eq!(ids.len(), 2);
+        assert!(ids.is_empty());
     }
 
     #[test]
-    fn parse_bg_agent_ids_handles_nested_object() {
-        let json = r#"{"sessions":[{"id":"0b36e159-8022-444a-a9f7-164faaa78e49"}]}"#;
+    fn bg_agent_session_is_detected() {
+        // Background agents use a mode other than "prompt"
+        let json = r#"{
+            "workers": {
+                "0b36e159": {
+                    "sessionId": "0b36e159-8022-444a-a9f7-164faaa78e49",
+                    "dispatch": { "launch": { "mode": "agent" } }
+                }
+            }
+        }"#;
         let ids = parse_bg_agent_ids_from_str(json);
         assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
     }
 
     #[test]
-    fn parse_bg_agent_ids_handles_uuid_as_object_key() {
-        // actual roster.json format: {"workers": {"<session-id>": {...}}}
-        let json = r#"{"proto":1,"workers":{"0b36e159-8022-444a-a9f7-164faaa78e49":{"pid":1234}}}"#;
+    fn worker_without_mode_treated_as_bg_agent() {
+        // If mode is absent, conservatively treat it as a bg agent
+        let json = r#"{"workers":{"0b36e159":{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49","dispatch":{}}}}"#;
         let ids = parse_bg_agent_ids_from_str(json);
         assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
     }
 
     #[test]
     fn parse_bg_agent_ids_extracts_id_from_jsonl_path() {
-        // resumed bg sessions store the original session path in launch.sessionId
+        // Resumed bg sessions store the original session path in dispatch.launch.sessionId
         let json = r#"{"workers":{"c48dbaf9":{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","dispatch":{"launch":{"mode":"resume","sessionId":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}}}}}"#;
         let ids = parse_bg_agent_ids_from_str(json);
         assert!(ids.contains("1ed07f96-9cff-4d93-a7ca-d5d638aad040"));
     }
 
     #[test]
-    fn parse_bg_agent_ids_ignores_non_uuid_strings() {
+    fn parse_bg_agent_ids_ignores_no_workers_key() {
+        // JSON without a "workers" object yields nothing
         let json = r#"{"status":"running","id":"0b36e159-8022-444a-a9f7-164faaa78e49"}"#;
         let ids = parse_bg_agent_ids_from_str(json);
-        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
-        assert!(!ids.contains("running"));
+        assert!(ids.is_empty());
     }
 
     #[test]
