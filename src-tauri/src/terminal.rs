@@ -19,6 +19,11 @@ pub fn open_in_terminal(cwd: &Path, resume_id: Option<&str>) -> Result<(), Spawn
     spawn_platform(cwd, &claude_invocation)
 }
 
+pub fn attach_in_terminal(cwd: &Path, session_id: &str) -> Result<(), SpawnError> {
+    let cmd = format!("claude agents attach {}", shell_escape(session_id));
+    spawn_platform(cwd, &cmd)
+}
+
 fn shell_escape(s: &str) -> String {
     let safe = s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
     if safe {
@@ -105,5 +110,19 @@ mod tests {
     #[test]
     fn shell_escape_quotes_unsafe_input() {
         assert_eq!(shell_escape("a;b"), "\"a;b\"");
+    }
+
+    #[test]
+    fn attach_command_format() {
+        let id = "0b36e159-8022-444a-a9f7-164faaa78e49";
+        let cmd = format!("claude agents attach {}", shell_escape(id));
+        assert_eq!(cmd, "claude agents attach 0b36e159-8022-444a-a9f7-164faaa78e49");
+    }
+
+    #[test]
+    fn attach_command_escapes_unsafe_id() {
+        let id = "id with spaces";
+        let cmd = format!("claude agents attach {}", shell_escape(id));
+        assert_eq!(cmd, "claude agents attach \"id with spaces\"");
     }
 }
