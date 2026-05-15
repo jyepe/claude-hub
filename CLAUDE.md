@@ -81,7 +81,7 @@ All `invoke` calls go through `src/lib/api.ts` — components never call `invoke
 - `components/HiddenProjectsManager.tsx` — modal to unhide projects
 - `components/RefreshButton.tsx` — manual refresh with last-refreshed timestamp
 
-**Open vs Attach:** `SessionRow` renders "Open" (→ `openSession` → `claude --resume <id>`) for normal sessions and "Attach" (→ `attachAgent` → `claude agents attach <id>`) for sessions where `session.is_bg_agent === true`.
+**Open vs Attach:** `SessionRow` renders "Open" (→ `openSession` → `claude --resume <id>`) for normal sessions and "Attach" (→ `attachAgent` → `claude agents attach <id>`) for sessions where `session.is_bg_agent === true`. See [`docs/session-row-launch.md`](docs/session-row-launch.md) for the full launch flow, bg-agent detection logic, security validation, and per-platform terminal behavior.
 
 ## Load-bearing constraints
 
