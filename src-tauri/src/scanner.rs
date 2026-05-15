@@ -47,62 +47,41 @@ fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
 }
 
 fn read_bg_agent_ids() -> HashSet<String> {
-    let path = match paths::claude_daemon_roster_path() {
-        Some(p) => p,
-        None => return HashSet::new(),
+    let jobs_dir = match paths::claude_jobs_dir() {
+        Some(p) if p.exists() => p,
+        _ => return HashSet::new(),
     };
-    parse_bg_agent_ids_from_path(&path)
-}
-
-fn parse_bg_agent_ids_from_path(path: &std::path::Path) -> HashSet<String> {
-    let text = match std::fs::read_to_string(path) {
-        Ok(t) => t,
+    let entries = match std::fs::read_dir(&jobs_dir) {
+        Ok(e) => e,
         Err(_) => return HashSet::new(),
-    };
-    parse_bg_agent_ids_from_str(&text)
-}
-
-fn parse_bg_agent_ids_from_str(text: &str) -> HashSet<String> {
-    let v: serde_json::Value = match serde_json::from_str(text) {
-        Ok(v) => v,
-        Err(_) => return HashSet::new(),
-    };
-    let workers = match v.get("workers").and_then(|w| w.as_object()) {
-        Some(w) => w,
-        None => return HashSet::new(),
     };
     let mut ids = HashSet::new();
-    for (_, worker) in workers {
-        // Regular interactive sessions use mode "prompt" — skip them.
-        // Background agents use a different mode (e.g. "agent", "task") or have no mode.
-        let mode = worker
-            .get("dispatch")
-            .and_then(|d| d.get("launch"))
-            .and_then(|l| l.get("mode"))
-            .and_then(|m| m.as_str());
-        if mode == Some("prompt") {
-            continue;
-        }
-        if let Some(sid) = worker.get("sessionId").and_then(|s| s.as_str()) {
-            if looks_like_uuid(sid) {
-                ids.insert(sid.to_string());
-            }
-        }
-        // Resumed bg agents store the original session file path in dispatch.launch.sessionId
-        if let Some(launch_sid) = worker
-            .get("dispatch")
-            .and_then(|d| d.get("launch"))
-            .and_then(|l| l.get("sessionId"))
-            .and_then(|s| s.as_str())
-        {
-            if looks_like_uuid(launch_sid) {
-                ids.insert(launch_sid.to_string());
-            } else if let Some(id) = uuid_from_jsonl_path(launch_sid) {
-                ids.insert(id);
-            }
-        }
+    for entry in entries.filter_map(|e| e.ok()) {
+        collect_ids_from_job_state(&entry.path().join("state.json"), &mut ids);
     }
     ids
+}
+
+fn collect_ids_from_job_state(path: &Path, ids: &mut HashSet<String>) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+    let v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    if let Some(sid) = v.get("sessionId").and_then(|s| s.as_str()) {
+        if looks_like_uuid(sid) {
+            ids.insert(sid.to_string());
+        }
+    }
+    // For resumed sessions, linkScanPath points to the original JSONL the agent is writing to
+    if let Some(link) = v.get("linkScanPath").and_then(|s| s.as_str()) {
+        if let Some(id) = uuid_from_jsonl_path(link) {
+            ids.insert(id);
+        }
+    }
 }
 
 fn uuid_from_jsonl_path(s: &str) -> Option<String> {
@@ -162,69 +141,50 @@ mod tests {
         assert_eq!(s.tokens, 0);
     }
 
-    #[test]
-    fn regular_interactive_session_excluded_from_bg_agents() {
-        // Real roster format: interactive sessions have dispatch.launch.mode = "prompt"
-        let json = r#"{
-            "workers": {
-                "f5ec5e6f": {
-                    "sessionId": "f5ec5e6f-84b2-4375-8ed8-a47fcab8ae24",
-                    "dispatch": { "launch": { "mode": "prompt" } }
-                }
-            }
-        }"#;
-        let ids = parse_bg_agent_ids_from_str(json);
-        assert!(ids.is_empty());
+    fn write_temp_state(name: &str, content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("claude-hub-job-state-{}.json", name));
+        std::fs::write(&path, content).unwrap();
+        path
     }
 
     #[test]
-    fn bg_agent_session_is_detected() {
-        // Background agents use a mode other than "prompt"
-        let json = r#"{
-            "workers": {
-                "0b36e159": {
-                    "sessionId": "0b36e159-8022-444a-a9f7-164faaa78e49",
-                    "dispatch": { "launch": { "mode": "agent" } }
-                }
-            }
-        }"#;
-        let ids = parse_bg_agent_ids_from_str(json);
+    fn job_state_session_id_is_collected() {
+        let path = write_temp_state(
+            "session-id",
+            r#"{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49","state":"running"}"#,
+        );
+        let mut ids = HashSet::new();
+        collect_ids_from_job_state(&path, &mut ids);
         assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
     }
 
     #[test]
-    fn worker_without_mode_treated_as_bg_agent() {
-        // If mode is absent, conservatively treat it as a bg agent
-        let json = r#"{"workers":{"0b36e159":{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49","dispatch":{}}}}"#;
-        let ids = parse_bg_agent_ids_from_str(json);
-        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
-    }
-
-    #[test]
-    fn parse_bg_agent_ids_extracts_id_from_jsonl_path() {
-        // Resumed bg sessions store the original session path in dispatch.launch.sessionId
-        let json = r#"{"workers":{"c48dbaf9":{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","dispatch":{"launch":{"mode":"resume","sessionId":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}}}}}"#;
-        let ids = parse_bg_agent_ids_from_str(json);
+    fn job_state_link_scan_path_is_collected_for_resumed_sessions() {
+        let path = write_temp_state(
+            "link-scan",
+            r#"{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","linkScanPath":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}"#,
+        );
+        let mut ids = HashSet::new();
+        collect_ids_from_job_state(&path, &mut ids);
+        assert!(ids.contains("c48dbaf9-4c87-4c76-91c0-8e20a8de849a"));
         assert!(ids.contains("1ed07f96-9cff-4d93-a7ca-d5d638aad040"));
     }
 
     #[test]
-    fn parse_bg_agent_ids_ignores_no_workers_key() {
-        // JSON without a "workers" object yields nothing
-        let json = r#"{"status":"running","id":"0b36e159-8022-444a-a9f7-164faaa78e49"}"#;
-        let ids = parse_bg_agent_ids_from_str(json);
+    fn job_state_missing_file_does_not_panic() {
+        let mut ids = HashSet::new();
+        collect_ids_from_job_state(
+            &std::env::temp_dir().join("__nonexistent_state_for_test.json"),
+            &mut ids,
+        );
         assert!(ids.is_empty());
     }
 
     #[test]
-    fn parse_bg_agent_ids_returns_empty_for_bad_json() {
-        let ids = parse_bg_agent_ids_from_str("not json at all");
-        assert!(ids.is_empty());
-    }
-
-    #[test]
-    fn parse_bg_agent_ids_returns_empty_for_missing_file() {
-        let ids = parse_bg_agent_ids_from_path(&std::env::temp_dir().join("__nonexistent_roster_for_test.json"));
+    fn job_state_bad_json_does_not_panic() {
+        let path = write_temp_state("bad-json", "not json at all");
+        let mut ids = HashSet::new();
+        collect_ids_from_job_state(&path, &mut ids);
         assert!(ids.is_empty());
     }
 }
