@@ -70,6 +70,7 @@ The entire surface area of Claude Code's on-disk state. **No private APIs needed
 |`~/.claude/history.jsonl`|Slash-command history|Across all sessions.|
 |`~/.claude/sessions.idx`|Pre-built session index cache|May or may not be present; tab-separated metadata. We can build our own if missing.|
 |`~/.claude/settings.json`|User settings|If we ever want to display "your defaults".|
+|`~/.claude/jobs/<short-id>/state.json`|Background agent job registry|Each subfolder is one bg-agent session. `state.json` fields: `sessionId` (full JSONL UUID), `linkScanPath` (JSONL file the agent writes to — may differ from sessionId for resumed sessions), `daemonShort` (8-char short ID), `intent`, `name`, `state`, `cwd`. The folder name is the same 8-char prefix as the full UUID. This is the authoritative source for which sessions are background agents — regular interactive sessions never create a jobs entry.|
 
 ### Critical JSONL parsing notes
 
@@ -96,7 +97,7 @@ The minimum that justifies the app existing.
 - Group sessions by decoded project path.
 - Project card UI: name, count, last-touched timestamp, "Resume" + "New session" buttons.
 - Expand a project card → list of its sessions, each with a context-usage bar and an "open" button.
-- "Open session" → spawn terminal with `cd <project> && claude --resume <id>` (or just `claude` for new).
+- "Open session" → spawn terminal with `cd <project> && claude --resume <id>` (or just `claude` for new). Sessions with a `~/.claude/jobs` entry are live background agents — show "Attach" instead, which runs `claude agents attach <session-id>`.
 
 **Definition of done:** Can replace `cd ~/projects/foo && claude --resume <hunt-for-id>` with a click.
 
