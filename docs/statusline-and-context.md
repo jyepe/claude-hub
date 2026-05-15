@@ -79,16 +79,20 @@ In `~/.claude/settings.json`:
 
 Replace the path with your local checkout. Restart Claude Code.
 
+**Migrating from an existing `statusLine.command`?** Before replacing the value, copy your current command path somewhere — you'll pass it as `CLAUDE_HUB_STATUSLINE_NEXT` (see [Forwarding](#forwarding-to-an-existing-statusline) below) so your bar keeps working alongside the wrapper.
+
 ## Forwarding to an existing statusline
 
 If you already have a custom statusline command, set the environment variable `CLAUDE_HUB_STATUSLINE_NEXT` to its absolute path. The wrapper will pipe the payload to that script and forward its stdout as the bar.
 
 If the env var isn't set, the wrapper auto-detects:
 
-- `~/.claude/statusline-command.sh` (used by the .sh wrapper)
-- `~/.claude/statusline-command.ps1` (used by the .ps1 wrapper)
+- `~/.claude/statusline-command.sh` (`.sh` wrapper only)
+- `~/.claude/statusline-command.ps1` (`.ps1` wrapper only)
 
 If neither is set or found, the built-in fallback (`<model>  <short cwd>  ctx:NN%`) is printed.
+
+> **Windows migration note:** The `.ps1` wrapper does **not** auto-detect `~/.claude/statusline-command.sh`. If you're moving from a bash statusline on Windows, either port your script to PowerShell and save it as `~/.claude/statusline-command.ps1` (it will be picked up automatically), or set `CLAUDE_HUB_STATUSLINE_NEXT` to the full path of a `.ps1` equivalent.
 
 ### PowerShell next-scripts: how to read the payload
 
