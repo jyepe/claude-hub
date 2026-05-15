@@ -7,6 +7,8 @@ pub enum SpawnError {
     #[error("no terminal emulator found")]
     #[allow(dead_code)]
     NoTerminal,
+    #[error("invalid session id")]
+    InvalidSessionId,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -20,7 +22,10 @@ pub fn open_in_terminal(cwd: &Path, resume_id: Option<&str>) -> Result<(), Spawn
 }
 
 pub fn attach_in_terminal(cwd: &Path, session_id: &str) -> Result<(), SpawnError> {
-    let cmd = format!("claude agents attach {}", shell_escape(session_id));
+    if !session_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(SpawnError::InvalidSessionId);
+    }
+    let cmd = format!("claude agents attach {}", session_id);
     spawn_platform(cwd, &cmd)
 }
 
@@ -120,9 +125,8 @@ mod tests {
     }
 
     #[test]
-    fn attach_command_escapes_unsafe_id() {
-        let id = "id with spaces";
-        let cmd = format!("claude agents attach {}", shell_escape(id));
-        assert_eq!(cmd, "claude agents attach \"id with spaces\"");
+    fn attach_rejects_unsafe_id() {
+        let result = attach_in_terminal(std::path::Path::new("."), "id with spaces");
+        assert!(matches!(result, Err(SpawnError::InvalidSessionId)));
     }
 }
