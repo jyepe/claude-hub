@@ -1,5 +1,7 @@
+mod active_sessions;
 mod cache;
 mod claude_config;
+mod killer;
 mod paths;
 mod prefs;
 mod projects;
