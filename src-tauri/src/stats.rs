@@ -74,6 +74,7 @@ mod tests {
             live_context_window: None,
             live_model_id: None,
             is_bg_agent: false,
+            live_status: None,
         }
     }
 

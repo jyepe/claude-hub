@@ -1,3 +1,4 @@
+use crate::active_sessions::LiveStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -26,6 +27,11 @@ pub struct Session {
     /// Always `false` when deserialized from cache; overridden by `scanner::scan_all` using the live roster.
     #[serde(default)]
     pub is_bg_agent: bool,
+    /// Status from `~/.claude/sessions/{pid}.json` when a live CC process is
+    /// attached to this session. `None` means closed (no live process).
+    /// Always `None` when deserialized from cache; overlayed by `scanner::scan_all`.
+    #[serde(default)]
+    pub live_status: Option<LiveStatus>,
 }
 
 #[derive(Debug, Default)]
@@ -77,6 +83,7 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         live_context_window: None,
         live_model_id: None,
         is_bg_agent: false,
+        live_status: None,
     }
 }
 
