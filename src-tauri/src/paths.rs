@@ -17,6 +17,10 @@ pub fn claude_jobs_dir() -> Option<PathBuf> {
     claude_dir().map(|c| c.join("jobs"))
 }
 
+pub fn claude_sessions_dir() -> Option<PathBuf> {
+    claude_dir().map(|c| c.join("sessions"))
+}
+
 pub fn claude_projects_dir() -> Option<PathBuf> {
     claude_dir().map(|c| c.join("projects"))
 }
@@ -71,6 +75,13 @@ mod tests {
     fn jobs_dir_path_resolves() {
         let p = claude_jobs_dir().unwrap();
         assert!(p.ends_with("jobs"));
+        assert!(p.to_string_lossy().contains(".claude"));
+    }
+
+    #[test]
+    fn sessions_dir_path_resolves() {
+        let p = claude_sessions_dir().unwrap();
+        assert!(p.ends_with("sessions"));
         assert!(p.to_string_lossy().contains(".claude"));
     }
 }
