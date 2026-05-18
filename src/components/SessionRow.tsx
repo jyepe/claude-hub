@@ -1,4 +1,4 @@
-import type { Session } from "../lib/types";
+import type { Session, LiveStatus } from "../lib/types";
 import { ContextMeter } from "./ContextMeter";
 import { formatTimeAgo, formatTokens } from "../lib/format";
 import { api } from "../lib/api";
@@ -11,17 +11,7 @@ const MODEL_WINDOWS: Record<string, number> = {
   "claude-haiku-4-5-20251001": 200_000,
 };
 
-// The JSONL only records the base model name (no `[1m]` suffix), so we infer
-// the active context window from these signals, in priority order:
-//   0. `liveWindow` — the truth from the statusline-cache wrapper (Option 5
-//      in PROJECT.md: a wrapper script writes CC's actual used_percentage to
-//      ~/.claude-hub/ctx-cache and the backend derives the window from it).
-//   1. Explicit `[1m]` suffix in the model string  → 1M (definite).
-//   2. Any assistant turn in the session whose prompt exceeded 200k → 1M
-//      (observably impossible on the standard window).
-//   3. The project's `lastModelUsage` in ~/.claude.json mentions a `[1m]`
-//      variant → 1M (heuristic: this project is currently on the 1M beta).
-// Fallback: model table, defaulting to 200k.
+// (unchanged) infer the active context window from several signals.
 export function windowFor(
   model: string | null,
   maxPromptTokens: number,
@@ -42,18 +32,42 @@ interface Props {
   session: Session;
   cwd: string;
   projectUsed1m: boolean;
+  onRefresh: () => void;
 }
 
-export function SessionRow({ session, cwd, projectUsed1m }: Props) {
-  const window = windowFor(
+function StatusDot({ status }: { status: LiveStatus | null }) {
+  if (!status) return <span aria-hidden className="w-2 h-2" />; // placeholder for grid alignment
+  const cls = status === "busy" ? "bg-ok" : "bg-text-3";
+  const label = status === "busy" ? "Busy" : "Idle";
+  return <span aria-label={label} title={label} className={`w-2 h-2 rounded-full ${cls}`} />;
+}
+
+export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
+  // Renamed from `window` to avoid shadowing the global `window` object
+  // (we need `window.confirm` / `window.alert` below).
+  const ctxWindow = windowFor(
     session.model,
     session.max_prompt_tokens,
     projectUsed1m,
     session.live_context_window,
   );
   const displayModel = session.live_model_id ?? session.model;
+  const isLive = session.live_status !== null;
+
+  async function onClose() {
+    if (!window.confirm("Close this session? Unsaved work in the session may be lost.")) return;
+    try {
+      await api.closeSession(session.id);
+    } catch (err) {
+      window.alert(String(err));
+    } finally {
+      onRefresh();
+    }
+  }
+
   return (
-    <div className="grid grid-cols-[1fr_auto_220px_auto] items-center gap-3 py-2 px-3 border-t border-border hover:bg-surface-hi">
+    <div className="grid grid-cols-[auto_1fr_auto_220px_auto_auto] items-center gap-3 py-2 px-3 border-t border-border hover:bg-surface-hi">
+      <StatusDot status={session.live_status} />
       <div className="min-w-0">
         <div className="truncate text-text-1 text-sm">
           {session.title ?? "(no prompt yet)"}
@@ -65,7 +79,7 @@ export function SessionRow({ session, cwd, projectUsed1m }: Props) {
       <span className="text-text-3 text-xs whitespace-nowrap">
         {formatTimeAgo(session.last_activity)}
       </span>
-      <ContextMeter tokens={session.context_tokens} window={window} />
+      <ContextMeter tokens={session.context_tokens} window={ctxWindow} />
       {session.is_bg_agent ? (
         <button
           type="button"
@@ -82,6 +96,19 @@ export function SessionRow({ session, cwd, projectUsed1m }: Props) {
         >
           Open
         </button>
+      )}
+      {isLive ? (
+        <button
+          type="button"
+          aria-label="Close session"
+          title="Close session"
+          onClick={onClose}
+          className="px-2 py-1 text-sm rounded-md text-text-3 hover:bg-danger hover:text-text-1"
+        >
+          ×
+        </button>
+      ) : (
+        <span aria-hidden className="w-0" />
       )}
     </div>
   );

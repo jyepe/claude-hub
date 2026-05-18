@@ -51,7 +51,13 @@ export function ProjectCard({ project, onMutate }: Props) {
       {open && (
         <div>
           {project.sessions.map((s) => (
-            <SessionRow key={s.id} session={s} cwd={project.path} projectUsed1m={project.used_1m_recently} />
+            <SessionRow
+              key={s.id}
+              session={s}
+              cwd={project.path}
+              projectUsed1m={project.used_1m_recently}
+              onRefresh={onMutate}
+            />
           ))}
           {project.worktrees.map((w) => (
             <div key={w.path}>
@@ -59,7 +65,13 @@ export function ProjectCard({ project, onMutate }: Props) {
                 worktree · {formatProjectPath(w.path)}
               </div>
               {w.sessions.map((s) => (
-                <SessionRow key={s.id} session={s} cwd={w.path} projectUsed1m={project.used_1m_recently} />
+                <SessionRow
+                  key={s.id}
+                  session={s}
+                  cwd={w.path}
+                  projectUsed1m={project.used_1m_recently}
+                  onRefresh={onMutate}
+                />
               ))}
             </div>
           ))}
