@@ -113,6 +113,19 @@ fn attach_agent(cwd: String, session_id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn close_session(session_id: String) -> Result<(), String> {
+    spawn_blocking(move || {
+        let live = active_sessions::read_all();
+        let proc = live
+            .get(&session_id)
+            .ok_or_else(|| "Session is no longer running".to_string())?;
+        killer::kill_tree(proc.pid)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -129,6 +142,7 @@ pub fn run() {
             unhide_project,
             open_session,
             attach_agent,
+            close_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
