@@ -3,7 +3,6 @@ use crate::cache;
 use crate::paths;
 use crate::sessions::{parse_session, Session};
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -31,9 +30,16 @@ pub fn scan_all() -> Vec<Session> {
             None => continue,
         }
     }
-    let bg_ids = read_bg_agent_ids();
+    let bg_info = read_bg_agent_info();
     for s in &mut out {
-        s.is_bg_agent = bg_ids.contains(&s.id);
+        if let Some(info) = bg_info.get(&s.id) {
+            s.is_bg_agent = true;
+            s.bg_state = info.state.clone();
+            s.bg_detail = info.detail.clone();
+            s.bg_tempo = info.tempo.clone();
+            s.bg_intent = info.intent.clone();
+            s.bg_name = info.name.clone();
+        }
     }
     let live = active_sessions::read_all();
     apply_live_status_overlay(&mut out, &live);
@@ -96,42 +102,20 @@ fn collect_info_from_job_state(path: &Path, out: &mut HashMap<String, BgAgentInf
     }
 }
 
-fn read_bg_agent_ids() -> HashSet<String> {
+fn read_bg_agent_info() -> HashMap<String, BgAgentInfo> {
     let jobs_dir = match paths::claude_jobs_dir() {
         Some(p) if p.exists() => p,
-        _ => return HashSet::new(),
+        _ => return HashMap::new(),
     };
     let entries = match std::fs::read_dir(&jobs_dir) {
         Ok(e) => e,
-        Err(_) => return HashSet::new(),
+        Err(_) => return HashMap::new(),
     };
-    let mut ids = HashSet::new();
+    let mut map = HashMap::new();
     for entry in entries.filter_map(|e| e.ok()) {
-        collect_ids_from_job_state(&entry.path().join("state.json"), &mut ids);
+        collect_info_from_job_state(&entry.path().join("state.json"), &mut map);
     }
-    ids
-}
-
-fn collect_ids_from_job_state(path: &Path, ids: &mut HashSet<String>) {
-    let text = match std::fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(_) => return,
-    };
-    let v: serde_json::Value = match serde_json::from_str(&text) {
-        Ok(v) => v,
-        Err(_) => return,
-    };
-    if let Some(sid) = v.get("sessionId").and_then(|s| s.as_str()) {
-        if looks_like_uuid(sid) {
-            ids.insert(sid.to_string());
-        }
-    }
-    // For resumed sessions, linkScanPath points to the original JSONL the agent is writing to
-    if let Some(link) = v.get("linkScanPath").and_then(|s| s.as_str()) {
-        if let Some(id) = uuid_from_jsonl_path(link) {
-            ids.insert(id);
-        }
-    }
+    map
 }
 
 fn uuid_from_jsonl_path(s: &str) -> Option<String> {
@@ -204,47 +188,6 @@ mod tests {
         ));
         std::fs::write(&path, content).unwrap();
         path
-    }
-
-    #[test]
-    fn job_state_session_id_is_collected() {
-        let path = write_temp_state(
-            "session-id",
-            r#"{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49","state":"running"}"#,
-        );
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
-    }
-
-    #[test]
-    fn job_state_link_scan_path_is_collected_for_resumed_sessions() {
-        let path = write_temp_state(
-            "link-scan",
-            r#"{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","linkScanPath":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}"#,
-        );
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.contains("c48dbaf9-4c87-4c76-91c0-8e20a8de849a"));
-        assert!(ids.contains("1ed07f96-9cff-4d93-a7ca-d5d638aad040"));
-    }
-
-    #[test]
-    fn job_state_missing_file_does_not_panic() {
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(
-            &std::env::temp_dir().join("__nonexistent_state_for_test.json"),
-            &mut ids,
-        );
-        assert!(ids.is_empty());
-    }
-
-    #[test]
-    fn job_state_bad_json_does_not_panic() {
-        let path = write_temp_state("bad-json", "not json at all");
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.is_empty());
     }
 
     #[test]
