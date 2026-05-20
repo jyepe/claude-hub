@@ -70,7 +70,7 @@ struct Acc {
     latest_assistant_ts: Option<DateTime<Utc>>,
     last_activity: Option<DateTime<Utc>>,
     session_id: Option<String>,
-    recent_excerpt: Option<String>,
+    latest_assistant_text: Option<String>,
 }
 
 pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
@@ -113,7 +113,7 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         bg_tempo: None,
         bg_intent: None,
         bg_name: None,
-        recent_excerpt: acc.recent_excerpt,
+        recent_excerpt: acc.latest_assistant_text.as_deref().map(|t| trim_excerpt(t, 140)),
     }
 }
 
@@ -199,7 +199,7 @@ fn absorb(acc: &mut Acc, v: &serde_json::Value) {
                     acc.context_tokens = prompt;
                     acc.latest_assistant_ts = event_ts.or(acc.latest_assistant_ts);
                     if let Some(text) = extract_assistant_text(v) {
-                        acc.recent_excerpt = Some(trim_excerpt(&text, 140));
+                        acc.latest_assistant_text = Some(text);
                     }
                 }
             }

@@ -1,4 +1,5 @@
 import type { Project, Session } from "../lib/types";
+import { sessionMatchesQuery } from "../lib/sessionDisplay";
 import { PinnedRow } from "./PinnedRow";
 import { ProjectRow } from "./ProjectRow";
 
@@ -15,17 +16,6 @@ interface Props {
   onHideProject: (project: Project) => void;
   onOpenHidden: () => void;
   onMutate: () => void;
-}
-
-function matchesQuery(s: Session, q: string): boolean {
-  if (!q) return true;
-  const needle = q.toLowerCase();
-  const hay = [
-    s.title ?? "",
-    s.recent_excerpt ?? "",
-    s.bg_name ?? "",
-  ].join(" ").toLowerCase();
-  return hay.includes(needle);
 }
 
 export function LeftRail({
@@ -68,7 +58,7 @@ export function LeftRail({
                   key={s.id}
                   session={s}
                   projectPath={pinnedProjectPaths.get(s.id) ?? ""}
-                  dimmed={!matchesQuery(s, searchQuery)}
+                  dimmed={!sessionMatchesQuery(s, searchQuery)}
                   onClick={onSelectSession}
                   onMutate={onMutate}
                 />

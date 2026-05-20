@@ -3,6 +3,7 @@ import type { Session, LiveStatus } from "../lib/types";
 import { ContextMeter } from "./ContextMeter";
 import { api } from "../lib/api";
 import { formatTimeAgo, formatTokens } from "../lib/format";
+import { sessionLabel } from "../lib/sessionDisplay";
 import { windowFor } from "./windowFor";
 
 interface Props {
@@ -157,9 +158,7 @@ export function SessionCard({
   const isLive = session.live_status !== null;
   const kind = chipFor(session);
 
-  const title = session.is_bg_agent
-    ? session.bg_name ?? session.bg_intent ?? session.title ?? "(no name)"
-    : session.title ?? "(no prompt yet)";
+  const title = sessionLabel(session);
 
   const body = session.recent_excerpt ?? (session.is_bg_agent ? session.bg_detail : null);
 

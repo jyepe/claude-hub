@@ -1,5 +1,6 @@
 import type { Session } from "../lib/types";
 import { api } from "../lib/api";
+import { sessionLabel } from "../lib/sessionDisplay";
 
 interface Props {
   session: Session;
@@ -19,7 +20,7 @@ function shortModel(model: string | null): string {
 }
 
 export function PinnedRow({ session, projectPath, dimmed, onClick, onMutate }: Props) {
-  const label = session.title ?? session.bg_name ?? "(no title)";
+  const label = sessionLabel(session);
   const model = shortModel(session.live_model_id ?? session.model);
 
   async function handleUnpin(e: React.MouseEvent) {

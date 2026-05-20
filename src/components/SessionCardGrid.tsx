@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Project, Session } from "../lib/types";
+import { sessionMatchesQuery } from "../lib/sessionDisplay";
 import { SessionCard } from "./SessionCard";
 
 interface Props {
@@ -53,19 +54,6 @@ function flatten(project: Project): FlatItem[] {
   return items;
 }
 
-function matches(s: Session, q: string): boolean {
-  if (!q) return true;
-  const needle = q.toLowerCase();
-  const haystack = [
-    s.title ?? "",
-    s.recent_excerpt ?? "",
-    s.bg_name ?? "",
-    s.bg_intent ?? "",
-    s.bg_detail ?? "",
-  ].join(" ").toLowerCase();
-  return haystack.includes(needle);
-}
-
 export function SessionCardGrid({
   project,
   pinnedIds,
@@ -75,7 +63,7 @@ export function SessionCardGrid({
 }: Props) {
   const items = useMemo(() => flatten(project), [project]);
   const visible = useMemo(
-    () => items.filter((it) => matches(it.session, searchQuery)),
+    () => items.filter((it) => sessionMatchesQuery(it.session, searchQuery)),
     [items, searchQuery],
   );
 
