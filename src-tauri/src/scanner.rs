@@ -210,6 +210,8 @@ mod tests {
                 message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
                 last_activity: None, live_context_window: None, live_model_id: None,
                 is_bg_agent: false, live_status: None,
+                bg_state: None, bg_detail: None, bg_tempo: None,
+                bg_intent: None, bg_name: None,
             },
             Session {
                 id: "closed-id".into(),
@@ -217,6 +219,8 @@ mod tests {
                 message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
                 last_activity: None, live_context_window: None, live_model_id: None,
                 is_bg_agent: false, live_status: None,
+                bg_state: None, bg_detail: None, bg_tempo: None,
+                bg_intent: None, bg_name: None,
             },
         ];
         let mut live = HashMap::new();

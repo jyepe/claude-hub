@@ -32,6 +32,19 @@ pub struct Session {
     /// Always `None` when deserialized from cache; overlayed by `scanner::scan_all`.
     #[serde(default)]
     pub live_status: Option<LiveStatus>,
+    /// State of the bg agent from `~/.claude/jobs/<id>/state.json`.
+    /// `None` for non-bg sessions. Always `None` when deserialized from cache;
+    /// overlayed by `scanner::scan_all`.
+    #[serde(default)]
+    pub bg_state: Option<String>,
+    #[serde(default)]
+    pub bg_detail: Option<String>,
+    #[serde(default)]
+    pub bg_tempo: Option<String>,
+    #[serde(default)]
+    pub bg_intent: Option<String>,
+    #[serde(default)]
+    pub bg_name: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -84,6 +97,11 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         live_model_id: None,
         is_bg_agent: false,
         live_status: None,
+        bg_state: None,
+        bg_detail: None,
+        bg_tempo: None,
+        bg_intent: None,
+        bg_name: None,
     }
 }
 
