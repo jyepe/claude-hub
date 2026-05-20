@@ -80,7 +80,7 @@ describe("UndoToast", () => {
         onDismiss={onDismiss}
       />,
     );
-    // After re-key, the original 4000ms doesn't count.
+    // project.path changed → useEffect re-runs → old timer cleared, fresh 5s starts.
     vi.advanceTimersByTime(4000);
     expect(onDismiss).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1000);
