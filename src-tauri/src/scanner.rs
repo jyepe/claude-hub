@@ -261,6 +261,24 @@ mod tests {
     }
 
     #[test]
+    fn collect_info_missing_file_does_not_panic() {
+        let mut map = HashMap::new();
+        collect_info_from_job_state(
+            &std::env::temp_dir().join("__nonexistent_state_for_test.json"),
+            &mut map,
+        );
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn collect_info_bad_json_does_not_panic() {
+        let path = write_temp_state("bad-json-info", "not json at all");
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        assert!(map.is_empty());
+    }
+
+    #[test]
     fn live_status_overlay_marks_matching_sessions() {
         use crate::active_sessions::{LiveProcess, LiveStatus};
         use std::collections::HashMap;
