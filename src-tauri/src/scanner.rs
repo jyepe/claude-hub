@@ -56,6 +56,46 @@ fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
     Some(session)
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct BgAgentInfo {
+    pub state: Option<String>,
+    pub detail: Option<String>,
+    pub tempo: Option<String>,
+    pub intent: Option<String>,
+    pub name: Option<String>,
+}
+
+fn collect_info_from_job_state(path: &Path, out: &mut HashMap<String, BgAgentInfo>) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+    let v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    let info = BgAgentInfo {
+        state: v.get("state").and_then(|s| s.as_str()).map(String::from),
+        detail: v.get("detail").and_then(|s| s.as_str()).map(String::from),
+        tempo: v.get("tempo").and_then(|s| s.as_str()).map(String::from),
+        intent: v.get("intent").and_then(|s| s.as_str()).map(String::from),
+        name: v.get("name").and_then(|s| s.as_str()).map(String::from),
+    };
+
+    if let Some(sid) = v.get("sessionId").and_then(|s| s.as_str()) {
+        if looks_like_uuid(sid) {
+            out.insert(sid.to_string(), info.clone());
+        }
+    }
+    // For resumed sessions, linkScanPath points to the original JSONL the agent writes to.
+    if let Some(link) = v.get("linkScanPath").and_then(|s| s.as_str()) {
+        if let Some(id) = uuid_from_jsonl_path(link) {
+            out.insert(id, info);
+        }
+    }
+}
+
 fn read_bg_agent_ids() -> HashSet<String> {
     let jobs_dir = match paths::claude_jobs_dir() {
         Some(p) if p.exists() => p,
@@ -196,6 +236,49 @@ mod tests {
         let mut ids = HashSet::new();
         collect_ids_from_job_state(&path, &mut ids);
         assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn collect_info_extracts_all_fields() {
+        let path = write_temp_state(
+            "full-fields",
+            r#"{
+                "sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49",
+                "state":"running",
+                "detail":"task in progress",
+                "tempo":"idle",
+                "intent":"/wiki what was the last job i applied to?",
+                "name":"job application history"
+            }"#,
+        );
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        let info = map
+            .get("0b36e159-8022-444a-a9f7-164faaa78e49")
+            .expect("session id key present");
+        assert_eq!(info.state.as_deref(), Some("running"));
+        assert_eq!(info.detail.as_deref(), Some("task in progress"));
+        assert_eq!(info.tempo.as_deref(), Some("idle"));
+        assert_eq!(info.intent.as_deref(), Some("/wiki what was the last job i applied to?"));
+        assert_eq!(info.name.as_deref(), Some("job application history"));
+    }
+
+    #[test]
+    fn collect_info_handles_missing_optional_fields() {
+        let path = write_temp_state(
+            "only-session-id",
+            r#"{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49"}"#,
+        );
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        let info = map
+            .get("0b36e159-8022-444a-a9f7-164faaa78e49")
+            .expect("session id key present");
+        assert_eq!(info.state, None);
+        assert_eq!(info.detail, None);
+        assert_eq!(info.tempo, None);
+        assert_eq!(info.intent, None);
+        assert_eq!(info.name, None);
     }
 
     #[test]
