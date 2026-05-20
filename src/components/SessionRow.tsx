@@ -43,13 +43,13 @@ function StatusDot({ status }: { status: LiveStatus | null }) {
 }
 
 function BgStateDot({ state }: { state: string | null }) {
+  const s = state?.toLowerCase() ?? null;
   const cls =
-    state === "running" ? "bg-warn"
-    : state === "done" ? "bg-ok"
-    : state === "error" ? "bg-danger"
+    s === "running" ? "bg-warn"
+    : s === "done" ? "bg-ok"
+    : s === "error" ? "bg-danger"
     : "bg-text-3";
-  const label = state ?? "unknown";
-  return <span aria-label={label} title={label} className={`w-2 h-2 rounded-full ${cls}`} />;
+  return <span aria-hidden className={`w-2 h-2 rounded-full ${cls}`} />;
 }
 
 export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
@@ -63,6 +63,7 @@ export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
   );
   const displayModel = session.live_model_id ?? session.model;
   const isLive = session.live_status !== null;
+  const normalizedBgState = session.bg_state?.toLowerCase() ?? null;
 
   async function onClose() {
     if (!window.confirm("Close this session? Unsaved work in the session may be lost.")) return;
@@ -85,9 +86,9 @@ export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
               {session.bg_name ?? session.bg_intent ?? session.title ?? "(no name)"}
             </div>
             <div className="text-[11px] text-text-3 truncate flex items-center gap-2">
-              <BgStateDot state={session.bg_state} />
+              <BgStateDot state={normalizedBgState} />
               <span className="font-mono tracking-wide">
-                {(session.bg_state ?? "unknown").toUpperCase()}
+                {(normalizedBgState ?? "unknown").toUpperCase()}
               </span>
               {session.bg_detail && (
                 <>

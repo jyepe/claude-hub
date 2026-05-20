@@ -95,11 +95,12 @@ describe("SessionRow bg-agent variant", () => {
       bg_intent: "/wiki search question",
       bg_name: null,
     });
-    const { getByText } = render(
+    const { container, getByText } = render(
       <SessionRow session={session} cwd="/tmp/proj" projectUsed1m={false} onRefresh={() => {}} />,
     );
     expect(getByText("/wiki search question")).toBeTruthy();
     expect(getByText("DONE")).toBeTruthy();
+    expect(container.querySelector(".bg-ok")).not.toBeNull();
   });
 
   it("falls back to session.title when both bg_name and bg_intent are null", () => {
