@@ -120,7 +120,17 @@ async fn close_session(session_id: String) -> Result<(), String> {
         let proc = live
             .get(&session_id)
             .ok_or_else(|| "Session is no longer running".to_string())?;
-        killer::kill_tree(proc.pid)
+        let claude_pid = proc.pid;
+        // Best-effort: kill the hosting shell (cmd.exe/bash/…) so the terminal
+        // tab closes too. On Windows `taskkill /T` cascades, so this single
+        // call also kills claude. On Unix `kill -KILL` does NOT cascade, so we
+        // still need the second call below to guarantee claude is gone.
+        if let Some(shell_pid) = killer::find_shell_ancestor(claude_pid) {
+            let _ = killer::kill_tree(shell_pid);
+        }
+        // Authoritative: ensure the claude process itself is dead. On Windows
+        // after the cascade above this is a no-op (early-returns on dead pid).
+        killer::kill_tree(claude_pid)
     })
     .await
     .map_err(|e| e.to_string())?
