@@ -22,7 +22,8 @@
 | `src/components/UndoToast.test.tsx` | Create | Verifies render, undo click, auto-dismiss, timer reset on path change. |
 | `src/components/ProjectCard.tsx` | Modify | Remove `onContextMenu` hide. Add `onHide` callback prop. Add a `KebabMenu`-style popover (inline component or sub-component in the same file) with a single "Hide project" item. |
 | `src/components/ProjectCard.test.tsx` | Create | Verifies kebab is rendered, click opens menu, "Hide project" calls `onHide`, **regression guard** that right-click no longer hides. |
-| `src/components/AppShell.tsx` | Modify | Add `pendingUndo` state, `handleHide` / `handleUndo` handlers. Pass `onHide` to every `<ProjectCard>`. Gate `<HiddenProjectsManager>` on `hiddenCount > 0`. Render `<UndoToast>` when `pendingUndo !== null`. |
+| `src/components/AppShell.tsx` | Modify | Add `pendingUndo` state, `handleHide` / `handleUndo` / `handleDismiss` handlers (the last in `useCallback` with empty deps to keep the toast's 5s timer stable across polls). Pass `onHide` to every `<ProjectCard>`. Gate `<HiddenProjectsManager>` on `hiddenCount > 0` and pass `count={hiddenCount}` to it (the manager's internal `hidden` array is empty until the panel is opened, so the parent supplies the button label count). Render `<UndoToast>` when `pendingUndo !== null`. |
+| `src/components/HiddenProjectsManager.tsx` | Modify | Accept a new `count: number` prop. Use it in the button label instead of `hidden.length`. Panel contents continue to load from `api.getPrefs()` on open (no logic change). |
 | `src/components/AppShell.test.tsx` | Create | Verifies hide → toast appears, undo → `api.unhideProject` called, manager hidden when no hidden projects. Mocks `../lib/api` via `vi.mock`. |
 
 The `KebabMenu` popover lives inside `ProjectCard.tsx` as a co-located component (not a separate file). It's single-use — extracting it would be premature.
@@ -667,6 +668,11 @@ export function AppShell() {
     }
   }, [pendingUndo, refreshAll]);
 
+  // Wrapped in useCallback so the 30s poll-driven re-render of AppShell does
+  // NOT mint a fresh `onDismiss` reference, which would otherwise re-trigger
+  // UndoToast's useEffect and reset the 5s auto-dismiss countdown.
+  const handleDismiss = useCallback(() => setPendingUndo(null), []);
+
   const all = projects ?? [];
   const visible = all.filter((p) => !p.hidden);
   const hiddenCount = all.filter((p) => p.hidden).length;
@@ -683,7 +689,7 @@ export function AppShell() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {hiddenCount > 0 && <HiddenProjectsManager onChange={refreshAll} />}
+          {hiddenCount > 0 && <HiddenProjectsManager count={hiddenCount} onChange={refreshAll} />}
           <RefreshButton onRefresh={refreshAll} lastRefresh={lastRefresh} />
         </div>
       </header>
@@ -715,7 +721,7 @@ export function AppShell() {
         <UndoToast
           project={pendingUndo}
           onUndo={handleUndo}
-          onDismiss={() => setPendingUndo(null)}
+          onDismiss={handleDismiss}
         />
       )}
     </div>

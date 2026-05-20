@@ -91,8 +91,7 @@ describe("AppShell — hide/undo wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /hide project/i }));
     await waitFor(() => expect(api.hideProject).toHaveBeenCalled());
-    expect(await screen.findByRole("status")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("claude-hub");
+    expect(await screen.findByRole("status")).toHaveTextContent("claude-hub");
   });
 
   it("calls api.unhideProject when the toast's Undo is clicked", async () => {
