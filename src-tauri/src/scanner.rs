@@ -63,12 +63,12 @@ fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct BgAgentInfo {
-    pub state: Option<String>,
-    pub detail: Option<String>,
-    pub tempo: Option<String>,
-    pub intent: Option<String>,
-    pub name: Option<String>,
+pub(crate) struct BgAgentInfo {
+    pub(crate) state: Option<String>,
+    pub(crate) detail: Option<String>,
+    pub(crate) tempo: Option<String>,
+    pub(crate) intent: Option<String>,
+    pub(crate) name: Option<String>,
 }
 
 fn collect_info_from_job_state(path: &Path, out: &mut HashMap<String, BgAgentInfo>) {
