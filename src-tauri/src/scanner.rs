@@ -192,7 +192,16 @@ mod tests {
     }
 
     fn write_temp_state(name: &str, content: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("claude-hub-job-state-{}.json", name));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "claude-hub-job-state-{}-{}-{}.json",
+            name,
+            std::process::id(),
+            nanos
+        ));
         std::fs::write(&path, content).unwrap();
         path
     }
@@ -279,6 +288,33 @@ mod tests {
         assert_eq!(info.tempo, None);
         assert_eq!(info.intent, None);
         assert_eq!(info.name, None);
+    }
+
+    #[test]
+    fn collect_info_inserts_same_info_under_link_scan_path_uuid() {
+        let path = write_temp_state(
+            "link-scan-double-insert",
+            r#"{
+                "sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a",
+                "state":"running",
+                "name":"resumed agent",
+                "linkScanPath":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"
+            }"#,
+        );
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+
+        let primary = map
+            .get("c48dbaf9-4c87-4c76-91c0-8e20a8de849a")
+            .expect("sessionId key present");
+        assert_eq!(primary.state.as_deref(), Some("running"));
+        assert_eq!(primary.name.as_deref(), Some("resumed agent"));
+
+        let linked = map
+            .get("1ed07f96-9cff-4d93-a7ca-d5d638aad040")
+            .expect("linkScanPath uuid key present");
+        assert_eq!(linked.state.as_deref(), Some("running"));
+        assert_eq!(linked.name.as_deref(), Some("resumed agent"));
     }
 
     #[test]
