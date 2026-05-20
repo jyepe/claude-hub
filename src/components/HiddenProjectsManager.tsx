@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
 interface Props {
+  count: number;
   onChange: () => void;
 }
 
-export function HiddenProjectsManager({ onChange }: Props) {
+export function HiddenProjectsManager({ count, onChange }: Props) {
   const [hidden, setHidden] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -31,7 +32,7 @@ export function HiddenProjectsManager({ onChange }: Props) {
         onClick={() => setOpen((o) => !o)}
         className="px-3 py-1 text-sm rounded-md border border-border bg-surface hover:bg-surface-hi text-text-2"
       >
-        Hidden ({hidden.length})
+        Hidden ({count})
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-[480px] z-10 bg-surface border border-border rounded-md p-3 shadow-lg">

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../lib/api";
 import { usePoll } from "../lib/usePoll";
 import type { Project, Stats } from "../lib/types";
@@ -6,6 +6,7 @@ import { HeaderStats } from "./HeaderStats";
 import { ProjectCard } from "./ProjectCard";
 import { RefreshButton } from "./RefreshButton";
 import { HiddenProjectsManager } from "./HiddenProjectsManager";
+import { UndoToast } from "./UndoToast";
 
 export function AppShell() {
   const projectsFetcher = useCallback(() => api.listProjects(), []);
@@ -19,6 +20,8 @@ export function AppShell() {
   const { data: stats, refresh: refreshStats, error: statsError } =
     usePoll<Stats>(statsFetcher);
 
+  const [pendingUndo, setPendingUndo] = useState<{ path: string; name: string } | null>(null);
+
   const errorMessage =
     (projectsError as Error | null)?.toString() ??
     (statsError as Error | null)?.toString() ??
@@ -29,7 +32,40 @@ export function AppShell() {
     refreshStats();
   }, [refreshProjects, refreshStats]);
 
-  const visible = (projects ?? []).filter((p) => !p.hidden);
+  const handleHide = useCallback(
+    async (project: Project) => {
+      try {
+        await api.hideProject(project.path);
+        setPendingUndo({ path: project.path, name: project.display_name });
+        refreshAll();
+      } catch (err) {
+        console.error("hide_project failed", err);
+      }
+    },
+    [refreshAll],
+  );
+
+  const handleUndo = useCallback(async () => {
+    if (!pendingUndo) return;
+    const path = pendingUndo.path;
+    try {
+      await api.unhideProject(path);
+    } catch (err) {
+      console.error("unhide_project failed", err);
+    } finally {
+      setPendingUndo(null);
+      refreshAll();
+    }
+  }, [pendingUndo, refreshAll]);
+
+  // Wrapped in useCallback so the 30s poll-driven re-render of AppShell does
+  // NOT mint a fresh `onDismiss` reference, which would otherwise re-trigger
+  // UndoToast's useEffect and reset the 5s auto-dismiss countdown.
+  const handleDismiss = useCallback(() => setPendingUndo(null), []);
+
+  const all = projects ?? [];
+  const visible = all.filter((p) => !p.hidden);
+  const hiddenCount = all.length - visible.length;
 
   return (
     <div className="min-h-screen flex flex-col gap-6 p-6 max-w-[1200px] mx-auto">
@@ -43,7 +79,7 @@ export function AppShell() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <HiddenProjectsManager onChange={refreshAll} />
+          {hiddenCount > 0 && <HiddenProjectsManager count={hiddenCount} onChange={refreshAll} />}
           <RefreshButton onRefresh={refreshAll} lastRefresh={lastRefresh} />
         </div>
       </header>
@@ -62,9 +98,22 @@ export function AppShell() {
           </div>
         )}
         {visible.map((p) => (
-          <ProjectCard key={p.path} project={p} onMutate={refreshAll} />
+          <ProjectCard
+            key={p.path}
+            project={p}
+            onMutate={refreshAll}
+            onHide={handleHide}
+          />
         ))}
       </main>
+
+      {pendingUndo && (
+        <UndoToast
+          project={pendingUndo}
+          onUndo={handleUndo}
+          onDismiss={handleDismiss}
+        />
+      )}
     </div>
   );
 }
