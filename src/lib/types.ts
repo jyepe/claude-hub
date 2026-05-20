@@ -15,6 +15,11 @@ export interface Session {
   live_model_id: string | null;
   is_bg_agent: boolean;
   live_status: LiveStatus | null;
+  bg_state: string | null;
+  bg_detail: string | null;
+  bg_tempo: string | null;
+  bg_intent: string | null;
+  bg_name: string | null;
 }
 
 export interface Worktree {
