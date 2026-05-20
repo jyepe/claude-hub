@@ -43,11 +43,11 @@ function StatusDot({ status }: { status: LiveStatus | null }) {
 }
 
 function BgStateDot({ state }: { state: string | null }) {
-  const s = state?.toLowerCase() ?? null;
+  // `state` is expected to be pre-normalized (lowercased) by the caller.
   const cls =
-    s === "running" ? "bg-warn"
-    : s === "done" ? "bg-ok"
-    : s === "error" ? "bg-danger"
+    state === "running" ? "bg-warn"
+    : state === "done" ? "bg-ok"
+    : state === "error" ? "bg-danger"
     : "bg-text-3";
   return <span aria-hidden className={`w-2 h-2 rounded-full ${cls}`} />;
 }
