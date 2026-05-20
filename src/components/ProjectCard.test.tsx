@@ -23,8 +23,8 @@ describe("ProjectCard", () => {
   it("does NOT hide on right-click (regression guard for #4)", () => {
     const onHide = vi.fn();
     render(<ProjectCard project={PROJECT} onMutate={() => {}} onHide={onHide} />);
-    const card = screen.getByText("claude-hub").closest("div");
-    fireEvent.contextMenu(card!);
+    const card = screen.getByTestId("project-card");
+    fireEvent.contextMenu(card);
     expect(onHide).not.toHaveBeenCalled();
   });
 
@@ -47,6 +47,7 @@ describe("ProjectCard", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /hide project/i }));
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(onHide).toHaveBeenCalledWith(PROJECT);
+    expect(screen.queryByRole("menuitem", { name: /hide project/i })).toBeNull();
   });
 
   it("closes the popover when Escape is pressed", () => {

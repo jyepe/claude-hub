@@ -35,7 +35,7 @@ function KebabMenu({
   }, [open]);
 
   return (
-    <div ref={wrapRef} className="relative" onClick={(e) => e.stopPropagation()}>
+    <div ref={wrapRef} className="relative">
       <button
         type="button"
         aria-label="More actions"
@@ -75,7 +75,7 @@ export function ProjectCard({ project, onMutate, onHide }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="group border border-border rounded-md bg-surface">
+    <div data-testid="project-card" className="group border border-border rounded-md bg-surface">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
