@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -7,6 +8,16 @@ use std::time::{Duration, Instant};
 /// extra crate dependencies.
 pub fn pid_alive(pid: u32) -> bool {
     pid_alive_impl(pid)
+}
+
+/// Snapshot every live PID in a single OS call. Use this when checking many
+/// PIDs at once — spawning `tasklist`/`kill -0` per pid is O(N) subprocesses
+/// per scan, which is the bottleneck for `active_sessions::read_all` when
+/// the sessions directory has many stale files. Returns an empty set if the
+/// OS call fails; callers should treat that as "no live sessions detected"
+/// rather than erroring out.
+pub fn live_pids_snapshot() -> HashSet<u32> {
+    live_pids_snapshot_impl().unwrap_or_default()
 }
 
 /// Terminate the process tree rooted at `pid`. Tries a graceful signal first;
@@ -24,7 +35,10 @@ pub fn kill_tree(pid: u32) -> Result<(), String> {
     if wait_until_dead(pid, Duration::from_millis(2000)) {
         return Ok(());
     }
-    forceful_kill(pid).map_err(|e| format!("forceful kill failed: {e}"))?;
+    // Same rationale as graceful_kill: the process may have exited between
+    // the aliveness check and this call, which would make taskkill/kill
+    // return non-zero. The wait_until_dead check below is the real verdict.
+    let _ = forceful_kill(pid);
     if wait_until_dead(pid, Duration::from_millis(1000)) {
         return Ok(());
     }
@@ -116,6 +130,48 @@ fn pid_alive_impl(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "windows")]
+fn live_pids_snapshot_impl() -> Option<HashSet<u32>> {
+    // `tasklist /NH /FO CSV` prints rows like:
+    //   "image.exe","1234","Console","1","12,345 K"
+    // We only need the PID (second column).
+    let output = Command::new("tasklist")
+        .args(["/NH", "/FO", "CSV"])
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Some(parse_tasklist_csv(&stdout))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_tasklist_csv(stdout: &str) -> HashSet<u32> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            // Split on `","` then strip the leading `"` from the first field.
+            let mut fields = line.split("\",\"");
+            let _image = fields.next()?;
+            let pid_field = fields.next()?.trim_matches('"');
+            pid_field.parse::<u32>().ok()
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn live_pids_snapshot_impl() -> Option<HashSet<u32>> {
+    // `ps -A -o pid=` prints one PID per line (header suppressed by `=`).
+    let output = Command::new("ps").args(["-A", "-o", "pid="]).output().ok()?;
+    if !output.status.success() { return None; }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Some(
+        stdout
+            .lines()
+            .filter_map(|l| l.trim().parse::<u32>().ok())
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +186,25 @@ mod tests {
     fn nonexistent_pid_is_not_alive() {
         // u32::MAX - 1 is unrealistic and will not be assigned by either kernel.
         assert!(!pid_alive(u32::MAX - 1));
+    }
+
+    #[test]
+    fn live_pids_snapshot_includes_current_process() {
+        let me = std::process::id();
+        let snap = live_pids_snapshot();
+        assert!(!snap.is_empty(), "snapshot should not be empty");
+        assert!(snap.contains(&me), "snapshot should contain our own pid");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn parse_tasklist_csv_extracts_pids() {
+        let sample = "\"svchost.exe\",\"1234\",\"Services\",\"0\",\"5,000 K\"\n\
+                      \"chrome.exe\",\"5678\",\"Console\",\"1\",\"100,000 K\"\n";
+        let set = parse_tasklist_csv(sample);
+        assert!(set.contains(&1234));
+        assert!(set.contains(&5678));
+        assert_eq!(set.len(), 2);
     }
 
     #[test]

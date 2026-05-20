@@ -21,8 +21,15 @@ pub struct LiveProcess {
 
 /// Load every `~/.claude/sessions/{pid}.json`, drop entries whose pid is no
 /// longer running on the OS, and return a map keyed by `sessionId`.
+///
+/// Aliveness is checked against a single snapshot of all live PIDs taken
+/// once per call. This keeps the cost at O(1) subprocess spawns regardless
+/// of how many stale session files are sitting in the directory.
 pub fn read_all() -> HashMap<String, LiveProcess> {
-    read_all_from(paths::claude_sessions_dir().as_deref(), killer::pid_alive)
+    let live = killer::live_pids_snapshot();
+    read_all_from(paths::claude_sessions_dir().as_deref(), |pid| {
+        live.contains(&pid)
+    })
 }
 
 /// Inner form factored out for tests: directory and aliveness check are
@@ -31,6 +38,7 @@ fn read_all_from(
     dir: Option<&std::path::Path>,
     is_alive: impl Fn(u32) -> bool,
 ) -> HashMap<String, LiveProcess> {
+
     let mut out = HashMap::new();
     let Some(dir) = dir else { return out; };
     let Ok(entries) = fs::read_dir(dir) else { return out; };
