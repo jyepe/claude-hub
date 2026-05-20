@@ -24,6 +24,7 @@ function baseSession(overrides: Partial<Session> = {}): Session {
     bg_tempo: null,
     bg_intent: null,
     bg_name: null,
+    recent_excerpt: null,
     ...overrides,
   };
 }

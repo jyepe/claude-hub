@@ -33,7 +33,7 @@ const STATS: Stats = {
   tokens_7d: 0,
   tokens_all_time: 0,
 };
-const PREFS: Prefs = { hidden_projects: [], noise_threshold: 0 };
+const PREFS: Prefs = { hidden_projects: [], noise_threshold: 0, pinned_session_ids: [] };
 
 function makeProject(over: Partial<Project> = {}): Project {
   return {
