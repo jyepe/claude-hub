@@ -37,12 +37,16 @@ pub struct Session {
     /// overlayed by `scanner::scan_all`.
     #[serde(default)]
     pub bg_state: Option<String>,
+    /// Free-text detail line from the bg agent's `state.json`. See `bg_state` for the overlay contract.
     #[serde(default)]
     pub bg_detail: Option<String>,
+    /// Tempo (e.g. "idle") from the bg agent's `state.json`. See `bg_state` for the overlay contract.
     #[serde(default)]
     pub bg_tempo: Option<String>,
+    /// User intent / slash command that spawned this bg agent. See `bg_state` for the overlay contract.
     #[serde(default)]
     pub bg_intent: Option<String>,
+    /// Display name from the bg agent's `state.json` (auto or user-set). See `bg_state` for the overlay contract.
     #[serde(default)]
     pub bg_name: Option<String>,
 }
