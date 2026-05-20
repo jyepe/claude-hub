@@ -1,3 +1,19 @@
+import type { Session } from "./types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function activeToday(sessions: Session[]): number {
+  const cutoff = Date.now() - DAY_MS;
+  let count = 0;
+  for (const s of sessions) {
+    if (!s.last_activity) continue;
+    const ts = Date.parse(s.last_activity);
+    if (!Number.isFinite(ts)) continue;
+    if (ts >= cutoff) count += 1;
+  }
+  return count;
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
