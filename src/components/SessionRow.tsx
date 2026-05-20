@@ -42,6 +42,16 @@ function StatusDot({ status }: { status: LiveStatus | null }) {
   return <span aria-label={label} title={label} className={`w-2 h-2 rounded-full ${cls}`} />;
 }
 
+function BgStateDot({ state }: { state: string | null }) {
+  // `state` is expected to be pre-normalized (lowercased) by the caller.
+  const cls =
+    state === "running" ? "bg-warn"
+    : state === "done" ? "bg-ok"
+    : state === "error" ? "bg-danger"
+    : "bg-text-3";
+  return <span aria-hidden className={`w-2 h-2 rounded-full ${cls}`} />;
+}
+
 export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
   // Renamed from `window` to avoid shadowing the global `window` object
   // (we need `window.confirm` / `window.alert` below).
@@ -53,6 +63,7 @@ export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
   );
   const displayModel = session.live_model_id ?? session.model;
   const isLive = session.live_status !== null;
+  const normalizedBgState = session.bg_state?.toLowerCase() ?? null;
 
   async function onClose() {
     if (!window.confirm("Close this session? Unsaved work in the session may be lost.")) return;
@@ -69,12 +80,34 @@ export function SessionRow({ session, cwd, projectUsed1m, onRefresh }: Props) {
     <div className="grid grid-cols-[auto_1fr_auto_220px_auto_auto] items-center gap-3 py-2 px-3 border-t border-border hover:bg-surface-hi">
       <StatusDot status={session.live_status} />
       <div className="min-w-0">
-        <div className="truncate text-text-1 text-sm">
-          {session.title ?? "(no prompt yet)"}
-        </div>
-        <div className="font-mono text-[11px] text-text-3 truncate">
-          {displayModel ?? "—"} · {session.message_count} msgs · {formatTokens(session.tokens)} tok lifetime
-        </div>
+        {session.is_bg_agent ? (
+          <>
+            <div className="truncate text-text-1 text-sm">
+              {session.bg_name ?? session.bg_intent ?? session.title ?? "(no name)"}
+            </div>
+            <div className="text-[11px] text-text-3 truncate flex items-center gap-2">
+              <BgStateDot state={normalizedBgState} />
+              <span className="font-mono tracking-wide">
+                {(normalizedBgState ?? "unknown").toUpperCase()}
+              </span>
+              {session.bg_detail && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="truncate">{session.bg_detail}</span>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="truncate text-text-1 text-sm">
+              {session.title ?? "(no prompt yet)"}
+            </div>
+            <div className="font-mono text-[11px] text-text-3 truncate">
+              {displayModel ?? "—"} · {session.message_count} msgs · {formatTokens(session.tokens)} tok lifetime
+            </div>
+          </>
+        )}
       </div>
       <span className="text-text-3 text-xs whitespace-nowrap">
         {formatTimeAgo(session.last_activity)}

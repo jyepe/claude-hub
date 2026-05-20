@@ -3,7 +3,6 @@ use crate::cache;
 use crate::paths;
 use crate::sessions::{parse_session, Session};
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -31,9 +30,16 @@ pub fn scan_all() -> Vec<Session> {
             None => continue,
         }
     }
-    let bg_ids = read_bg_agent_ids();
+    let bg_info = read_bg_agent_info();
     for s in &mut out {
-        s.is_bg_agent = bg_ids.contains(&s.id);
+        if let Some(info) = bg_info.get(&s.id) {
+            s.is_bg_agent = true;
+            s.bg_state = info.state.clone();
+            s.bg_detail = info.detail.clone();
+            s.bg_tempo = info.tempo.clone();
+            s.bg_intent = info.intent.clone();
+            s.bg_name = info.name.clone();
+        }
     }
     let live = active_sessions::read_all();
     apply_live_status_overlay(&mut out, &live);
@@ -56,23 +62,16 @@ fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
     Some(session)
 }
 
-fn read_bg_agent_ids() -> HashSet<String> {
-    let jobs_dir = match paths::claude_jobs_dir() {
-        Some(p) if p.exists() => p,
-        _ => return HashSet::new(),
-    };
-    let entries = match std::fs::read_dir(&jobs_dir) {
-        Ok(e) => e,
-        Err(_) => return HashSet::new(),
-    };
-    let mut ids = HashSet::new();
-    for entry in entries.filter_map(|e| e.ok()) {
-        collect_ids_from_job_state(&entry.path().join("state.json"), &mut ids);
-    }
-    ids
+#[derive(Debug, Clone, Default)]
+pub(crate) struct BgAgentInfo {
+    pub(crate) state: Option<String>,
+    pub(crate) detail: Option<String>,
+    pub(crate) tempo: Option<String>,
+    pub(crate) intent: Option<String>,
+    pub(crate) name: Option<String>,
 }
 
-fn collect_ids_from_job_state(path: &Path, ids: &mut HashSet<String>) {
+fn collect_info_from_job_state(path: &Path, out: &mut HashMap<String, BgAgentInfo>) {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
         Err(_) => return,
@@ -81,17 +80,42 @@ fn collect_ids_from_job_state(path: &Path, ids: &mut HashSet<String>) {
         Ok(v) => v,
         Err(_) => return,
     };
+
+    let info = BgAgentInfo {
+        state: v.get("state").and_then(|s| s.as_str()).map(String::from),
+        detail: v.get("detail").and_then(|s| s.as_str()).map(String::from),
+        tempo: v.get("tempo").and_then(|s| s.as_str()).map(String::from),
+        intent: v.get("intent").and_then(|s| s.as_str()).map(String::from),
+        name: v.get("name").and_then(|s| s.as_str()).map(String::from),
+    };
+
     if let Some(sid) = v.get("sessionId").and_then(|s| s.as_str()) {
         if looks_like_uuid(sid) {
-            ids.insert(sid.to_string());
+            out.insert(sid.to_string(), info.clone());
         }
     }
-    // For resumed sessions, linkScanPath points to the original JSONL the agent is writing to
+    // For resumed sessions, linkScanPath points to the original JSONL the agent writes to.
     if let Some(link) = v.get("linkScanPath").and_then(|s| s.as_str()) {
         if let Some(id) = uuid_from_jsonl_path(link) {
-            ids.insert(id);
+            out.insert(id, info);
         }
     }
+}
+
+fn read_bg_agent_info() -> HashMap<String, BgAgentInfo> {
+    let jobs_dir = match paths::claude_jobs_dir() {
+        Some(p) if p.exists() => p,
+        _ => return HashMap::new(),
+    };
+    let entries = match std::fs::read_dir(&jobs_dir) {
+        Ok(e) => e,
+        Err(_) => return HashMap::new(),
+    };
+    let mut map = HashMap::new();
+    for entry in entries.filter_map(|e| e.ok()) {
+        collect_info_from_job_state(&entry.path().join("state.json"), &mut map);
+    }
+    map
 }
 
 fn uuid_from_jsonl_path(s: &str) -> Option<String> {
@@ -152,50 +176,106 @@ mod tests {
     }
 
     fn write_temp_state(name: &str, content: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("claude-hub-job-state-{}.json", name));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "claude-hub-job-state-{}-{}-{}.json",
+            name,
+            std::process::id(),
+            nanos
+        ));
         std::fs::write(&path, content).unwrap();
         path
     }
 
     #[test]
-    fn job_state_session_id_is_collected() {
+    fn collect_info_extracts_all_fields() {
         let path = write_temp_state(
-            "session-id",
-            r#"{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49","state":"running"}"#,
+            "full-fields",
+            r#"{
+                "sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49",
+                "state":"running",
+                "detail":"task in progress",
+                "tempo":"idle",
+                "intent":"/wiki what was the last job i applied to?",
+                "name":"job application history"
+            }"#,
         );
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.contains("0b36e159-8022-444a-a9f7-164faaa78e49"));
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        let info = map
+            .get("0b36e159-8022-444a-a9f7-164faaa78e49")
+            .expect("session id key present");
+        assert_eq!(info.state.as_deref(), Some("running"));
+        assert_eq!(info.detail.as_deref(), Some("task in progress"));
+        assert_eq!(info.tempo.as_deref(), Some("idle"));
+        assert_eq!(info.intent.as_deref(), Some("/wiki what was the last job i applied to?"));
+        assert_eq!(info.name.as_deref(), Some("job application history"));
     }
 
     #[test]
-    fn job_state_link_scan_path_is_collected_for_resumed_sessions() {
+    fn collect_info_handles_missing_optional_fields() {
         let path = write_temp_state(
-            "link-scan",
-            r#"{"sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a","linkScanPath":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"}"#,
+            "only-session-id",
+            r#"{"sessionId":"0b36e159-8022-444a-a9f7-164faaa78e49"}"#,
         );
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.contains("c48dbaf9-4c87-4c76-91c0-8e20a8de849a"));
-        assert!(ids.contains("1ed07f96-9cff-4d93-a7ca-d5d638aad040"));
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        let info = map
+            .get("0b36e159-8022-444a-a9f7-164faaa78e49")
+            .expect("session id key present");
+        assert_eq!(info.state, None);
+        assert_eq!(info.detail, None);
+        assert_eq!(info.tempo, None);
+        assert_eq!(info.intent, None);
+        assert_eq!(info.name, None);
     }
 
     #[test]
-    fn job_state_missing_file_does_not_panic() {
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(
+    fn collect_info_inserts_same_info_under_link_scan_path_uuid() {
+        let path = write_temp_state(
+            "link-scan-double-insert",
+            r#"{
+                "sessionId":"c48dbaf9-4c87-4c76-91c0-8e20a8de849a",
+                "state":"running",
+                "name":"resumed agent",
+                "linkScanPath":"C:\\Users\\foo\\.claude\\projects\\bar\\1ed07f96-9cff-4d93-a7ca-d5d638aad040.jsonl"
+            }"#,
+        );
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+
+        let primary = map
+            .get("c48dbaf9-4c87-4c76-91c0-8e20a8de849a")
+            .expect("sessionId key present");
+        assert_eq!(primary.state.as_deref(), Some("running"));
+        assert_eq!(primary.name.as_deref(), Some("resumed agent"));
+
+        let linked = map
+            .get("1ed07f96-9cff-4d93-a7ca-d5d638aad040")
+            .expect("linkScanPath uuid key present");
+        assert_eq!(linked.state.as_deref(), Some("running"));
+        assert_eq!(linked.name.as_deref(), Some("resumed agent"));
+    }
+
+    #[test]
+    fn collect_info_missing_file_does_not_panic() {
+        let mut map = HashMap::new();
+        collect_info_from_job_state(
             &std::env::temp_dir().join("__nonexistent_state_for_test.json"),
-            &mut ids,
+            &mut map,
         );
-        assert!(ids.is_empty());
+        assert!(map.is_empty());
     }
 
     #[test]
-    fn job_state_bad_json_does_not_panic() {
-        let path = write_temp_state("bad-json", "not json at all");
-        let mut ids = HashSet::new();
-        collect_ids_from_job_state(&path, &mut ids);
-        assert!(ids.is_empty());
+    fn collect_info_bad_json_does_not_panic() {
+        let path = write_temp_state("bad-json-info", "not json at all");
+        let mut map = HashMap::new();
+        collect_info_from_job_state(&path, &mut map);
+        assert!(map.is_empty());
     }
 
     #[test]
@@ -210,6 +290,8 @@ mod tests {
                 message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
                 last_activity: None, live_context_window: None, live_model_id: None,
                 is_bg_agent: false, live_status: None,
+                bg_state: None, bg_detail: None, bg_tempo: None,
+                bg_intent: None, bg_name: None,
             },
             Session {
                 id: "closed-id".into(),
@@ -217,6 +299,8 @@ mod tests {
                 message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
                 last_activity: None, live_context_window: None, live_model_id: None,
                 is_bg_agent: false, live_status: None,
+                bg_state: None, bg_detail: None, bg_tempo: None,
+                bg_intent: None, bg_name: None,
             },
         ];
         let mut live = HashMap::new();
