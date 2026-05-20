@@ -12,4 +12,6 @@ export const api = {
     invoke<void>("open_session", { cwd, resumeId: resumeId ?? null }),
   attachAgent: (cwd: string, sessionId: string) =>
     invoke<void>("attach_agent", { cwd, sessionId }),
+  closeSession: (sessionId: string) =>
+    invoke<void>("close_session", { sessionId }),
 };

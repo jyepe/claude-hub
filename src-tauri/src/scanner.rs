@@ -1,6 +1,8 @@
+use crate::active_sessions::{self, LiveProcess};
 use crate::cache;
 use crate::paths;
 use crate::sessions::{parse_session, Session};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -33,7 +35,15 @@ pub fn scan_all() -> Vec<Session> {
     for s in &mut out {
         s.is_bg_agent = bg_ids.contains(&s.id);
     }
+    let live = active_sessions::read_all();
+    apply_live_status_overlay(&mut out, &live);
     out
+}
+
+fn apply_live_status_overlay(sessions: &mut [Session], live: &HashMap<String, LiveProcess>) {
+    for s in sessions {
+        s.live_status = live.get(&s.id).map(|p| p.status);
+    }
 }
 
 fn parse_one(jsonl: &Path, cache_dir: &Path) -> Option<Session> {
@@ -186,5 +196,37 @@ mod tests {
         let mut ids = HashSet::new();
         collect_ids_from_job_state(&path, &mut ids);
         assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn live_status_overlay_marks_matching_sessions() {
+        use crate::active_sessions::{LiveProcess, LiveStatus};
+        use std::collections::HashMap;
+
+        let mut sessions = vec![
+            Session {
+                id: "alive-id".into(),
+                jsonl_path: String::new(), cwd: None, title: None, model: None,
+                message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
+                last_activity: None, live_context_window: None, live_model_id: None,
+                is_bg_agent: false, live_status: None,
+            },
+            Session {
+                id: "closed-id".into(),
+                jsonl_path: String::new(), cwd: None, title: None, model: None,
+                message_count: 0, tokens: 0, context_tokens: 0, max_prompt_tokens: 0,
+                last_activity: None, live_context_window: None, live_model_id: None,
+                is_bg_agent: false, live_status: None,
+            },
+        ];
+        let mut live = HashMap::new();
+        live.insert(
+            "alive-id".to_string(),
+            LiveProcess { pid: 1, status: LiveStatus::Busy, session_id: "alive-id".into() },
+        );
+        apply_live_status_overlay(&mut sessions, &live);
+
+        assert_eq!(sessions[0].live_status, Some(LiveStatus::Busy));
+        assert_eq!(sessions[1].live_status, None);
     }
 }

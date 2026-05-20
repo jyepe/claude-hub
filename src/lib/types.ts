@@ -1,3 +1,5 @@
+export type LiveStatus = "idle" | "busy";
+
 export interface Session {
   id: string;
   jsonl_path: string;
@@ -12,6 +14,7 @@ export interface Session {
   live_context_window: number | null;
   live_model_id: string | null;
   is_bg_agent: boolean;
+  live_status: LiveStatus | null;
 }
 
 export interface Worktree {

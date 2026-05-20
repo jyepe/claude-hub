@@ -1,5 +1,7 @@
+mod active_sessions;
 mod cache;
 mod claude_config;
+mod killer;
 mod paths;
 mod prefs;
 mod projects;
@@ -111,6 +113,29 @@ fn attach_agent(cwd: String, session_id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn close_session(session_id: String) -> Result<(), String> {
+    spawn_blocking(move || {
+        let live = active_sessions::read_all();
+        let proc = live
+            .get(&session_id)
+            .ok_or_else(|| "Session is no longer running".to_string())?;
+        let claude_pid = proc.pid;
+        // Best-effort: kill the hosting shell (cmd.exe/bash/…) so the terminal
+        // tab closes too. On Windows `taskkill /T` cascades, so this single
+        // call also kills claude. On Unix `kill -KILL` does NOT cascade, so we
+        // still need the second call below to guarantee claude is gone.
+        if let Some(shell_pid) = killer::find_shell_ancestor(claude_pid) {
+            let _ = killer::kill_tree(shell_pid);
+        }
+        // Authoritative: ensure the claude process itself is dead. On Windows
+        // after the cascade above this is a no-op (early-returns on dead pid).
+        killer::kill_tree(claude_pid)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -127,6 +152,7 @@ pub fn run() {
             unhide_project,
             open_session,
             attach_agent,
+            close_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
