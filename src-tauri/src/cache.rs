@@ -102,6 +102,7 @@ mod tests {
             live_status: None,
             bg_state: None, bg_detail: None, bg_tempo: None,
             bg_intent: None, bg_name: None,
+            recent_excerpt: None,
         };
         write(&cache, &jsonl, &s).unwrap();
         let got = read(&cache, &jsonl).unwrap();
@@ -130,6 +131,7 @@ mod tests {
             live_status: None,
             bg_state: None, bg_detail: None, bg_tempo: None,
             bg_intent: None, bg_name: None,
+            recent_excerpt: None,
         };
         write(&cache, &jsonl, &s).unwrap();
 

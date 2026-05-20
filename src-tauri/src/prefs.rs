@@ -6,6 +6,8 @@ use std::path::Path;
 pub struct Prefs {
     pub hidden_projects: BTreeSet<String>,
     pub noise_threshold: u32,
+    #[serde(default)]
+    pub pinned_session_ids: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -13,6 +15,7 @@ impl Default for Prefs {
         Self {
             hidden_projects: BTreeSet::new(),
             noise_threshold: 2,
+            pinned_session_ids: Vec::new(),
         }
     }
 }
@@ -65,5 +68,31 @@ mod tests {
         let r = read(&path);
         assert_eq!(r.noise_threshold, 5);
         assert!(r.hidden_projects.contains("/x/y"));
+    }
+
+    #[test]
+    fn pinned_session_ids_default_empty_and_roundtrip() {
+        let path = fresh_path();
+        let p_default = read(&path);
+        assert!(p_default.pinned_session_ids.is_empty());
+
+        let mut p = Prefs::default();
+        p.pinned_session_ids.push("sess-aaa".to_string());
+        p.pinned_session_ids.push("sess-bbb".to_string());
+        write(&path, &p).unwrap();
+        let r = read(&path);
+        assert_eq!(r.pinned_session_ids, vec!["sess-aaa", "sess-bbb"]);
+    }
+
+    #[test]
+    fn legacy_prefs_file_without_pinned_field_deserializes() {
+        let path = fresh_path();
+        let legacy_json = br#"{"hidden_projects":["/x/y"],"noise_threshold":3}"#;
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, legacy_json).unwrap();
+        let p = read(&path);
+        assert_eq!(p.noise_threshold, 3);
+        assert!(p.hidden_projects.contains("/x/y"));
+        assert!(p.pinned_session_ids.is_empty());
     }
 }

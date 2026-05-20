@@ -20,6 +20,7 @@ export interface Session {
   bg_tempo: string | null;
   bg_intent: string | null;
   bg_name: string | null;
+  recent_excerpt: string | null;
 }
 
 export interface Worktree {
@@ -49,4 +50,5 @@ export interface Stats {
 export interface Prefs {
   hidden_projects: string[];
   noise_threshold: number;
+  pinned_session_ids: string[];
 }

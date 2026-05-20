@@ -102,6 +102,25 @@ async fn unhide_project(path: String, state: State<'_, AppState>) -> Result<(), 
 }
 
 #[tauri::command]
+async fn pin_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.prefs_lock.lock().await;
+    let prefs_path = paths::hub_prefs_path().ok_or_else(|| "no home dir".to_string())?;
+    let mut prefs = prefs::read(&prefs_path);
+    prefs.pinned_session_ids.retain(|id| id != &session_id);
+    prefs.pinned_session_ids.insert(0, session_id);
+    prefs::write(&prefs_path, &prefs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn unpin_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.prefs_lock.lock().await;
+    let prefs_path = paths::hub_prefs_path().ok_or_else(|| "no home dir".to_string())?;
+    let mut prefs = prefs::read(&prefs_path);
+    prefs.pinned_session_ids.retain(|id| id != &session_id);
+    prefs::write(&prefs_path, &prefs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn open_session(cwd: String, resume_id: Option<String>) -> Result<(), String> {
     terminal::open_in_terminal(&PathBuf::from(cwd), resume_id.as_deref())
         .map_err(|e| e.to_string())
@@ -153,6 +172,8 @@ pub fn run() {
             open_session,
             attach_agent,
             close_session,
+            pin_session,
+            unpin_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

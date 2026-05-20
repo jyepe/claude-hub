@@ -14,4 +14,8 @@ export const api = {
     invoke<void>("attach_agent", { cwd, sessionId }),
   closeSession: (sessionId: string) =>
     invoke<void>("close_session", { sessionId }),
+  pinSession: (sessionId: string) =>
+    invoke<void>("pin_session", { sessionId }),
+  unpinSession: (sessionId: string) =>
+    invoke<void>("unpin_session", { sessionId }),
 };
