@@ -52,6 +52,7 @@ function KebabMenu({
       {open && (
         <div
           role="menu"
+          onClick={(e) => e.stopPropagation()}
           className="absolute right-0 top-full mt-1 z-10 min-w-[160px] bg-surface-hi border border-border rounded-md p-1 shadow-[0_1px_2px_rgba(0,0,0,0.12),0_8px_24px_rgba(0,0,0,0.28)]"
         >
           <button

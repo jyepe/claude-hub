@@ -65,7 +65,7 @@ export function AppShell() {
 
   const all = projects ?? [];
   const visible = all.filter((p) => !p.hidden);
-  const hiddenCount = all.filter((p) => p.hidden).length;
+  const hiddenCount = all.length - visible.length;
 
   return (
     <div className="min-h-screen flex flex-col gap-6 p-6 max-w-[1200px] mx-auto">
