@@ -292,6 +292,7 @@ mod tests {
                 is_bg_agent: false, live_status: None,
                 bg_state: None, bg_detail: None, bg_tempo: None,
                 bg_intent: None, bg_name: None,
+                recent_excerpt: None,
             },
             Session {
                 id: "closed-id".into(),
@@ -301,6 +302,7 @@ mod tests {
                 is_bg_agent: false, live_status: None,
                 bg_state: None, bg_detail: None, bg_tempo: None,
                 bg_intent: None, bg_name: None,
+                recent_excerpt: None,
             },
         ];
         let mut live = HashMap::new();

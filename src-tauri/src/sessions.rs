@@ -49,6 +49,12 @@ pub struct Session {
     /// Display name from the bg agent's `state.json` (auto or user-set). See `bg_state` for the overlay contract.
     #[serde(default)]
     pub bg_name: Option<String>,
+    /// First ~140 chars of the latest assistant turn's text content, trimmed on
+    /// a word boundary, ellipsised when truncated. `None` when no assistant
+    /// turn exists in the session. Stored in the sidecar cache; recomputed
+    /// when the JSONL mtime changes.
+    #[serde(default)]
+    pub recent_excerpt: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -64,6 +70,7 @@ struct Acc {
     latest_assistant_ts: Option<DateTime<Utc>>,
     last_activity: Option<DateTime<Utc>>,
     session_id: Option<String>,
+    recent_excerpt: Option<String>,
 }
 
 pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
@@ -106,6 +113,7 @@ pub fn parse_session(jsonl_path: &Path, contents: &str) -> Session {
         bg_tempo: None,
         bg_intent: None,
         bg_name: None,
+        recent_excerpt: acc.recent_excerpt,
     }
 }
 
@@ -190,11 +198,58 @@ fn absorb(acc: &mut Acc, v: &serde_json::Value) {
                 if is_latest {
                     acc.context_tokens = prompt;
                     acc.latest_assistant_ts = event_ts.or(acc.latest_assistant_ts);
+                    if let Some(text) = extract_assistant_text(v) {
+                        acc.recent_excerpt = Some(trim_excerpt(&text, 140));
+                    }
                 }
             }
         }
         _ => {}
     }
+}
+
+fn extract_assistant_text(v: &serde_json::Value) -> Option<String> {
+    let content = v.get("message").and_then(|m| m.get("content"))?;
+    if let Some(s) = content.as_str() {
+        return Some(s.to_string());
+    }
+    let arr = content.as_array()?;
+    let mut parts: Vec<String> = Vec::new();
+    for block in arr {
+        let typ = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if typ != "text" {
+            continue;
+        }
+        if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+            parts.push(t.to_string());
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
+fn trim_excerpt(s: &str, max_chars: usize) -> String {
+    let cleaned: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let chars: Vec<char> = cleaned.chars().collect();
+    if chars.len() <= max_chars {
+        return cleaned;
+    }
+    let mut cut = max_chars;
+    while cut > 0 && chars[cut - 1] != ' ' {
+        cut -= 1;
+    }
+    if cut == 0 {
+        cut = max_chars;
+    }
+    let mut out: String = chars[..cut].iter().collect();
+    while out.ends_with(' ') {
+        out.pop();
+    }
+    out.push('…');
+    out
 }
 
 fn extract_user_text(v: &serde_json::Value) -> Option<String> {
@@ -372,5 +427,41 @@ mod tests {
         let contents = "not json\n{\"broken\":\n";
         let s = parse_session(&pp(), contents);
         assert_eq!(s.tokens, 0);
+    }
+
+    #[test]
+    fn recent_excerpt_captures_last_assistant_text() {
+        let early = r#"{"uuid":"a1","type":"assistant","timestamp":"2026-05-09T03:55:00Z","message":{"content":[{"type":"text","text":"first assistant turn"}],"usage":{"input_tokens":1}}}"#;
+        let later = r#"{"uuid":"a2","type":"assistant","timestamp":"2026-05-09T03:56:00Z","message":{"content":[{"type":"text","text":"ok — pulled the chunk handler into its own module"}],"usage":{"input_tokens":1}}}"#;
+        let s = parse_session(&pp(), &format!("{}\n{}\n", early, later));
+        assert_eq!(
+            s.recent_excerpt.as_deref(),
+            Some("ok — pulled the chunk handler into its own module")
+        );
+    }
+
+    #[test]
+    fn recent_excerpt_truncates_long_text_on_word_boundary() {
+        let long_text = "word ".repeat(200); // 1000+ chars
+        let line = format!(
+            r#"{{"uuid":"a1","type":"assistant","timestamp":"2026-05-09T03:55:00Z","message":{{"content":[{{"type":"text","text":"{}"}}],"usage":{{"input_tokens":1}}}}}}"#,
+            long_text.trim()
+        );
+        let s = parse_session(&pp(), &format!("{}\n", line));
+        let excerpt = s.recent_excerpt.expect("expected an excerpt");
+        assert!(excerpt.chars().count() <= 144, "excerpt was {} chars: {:?}", excerpt.chars().count(), excerpt);
+        assert!(excerpt.ends_with('…'), "expected trailing ellipsis: {:?}", excerpt);
+        assert!(
+            !excerpt.trim_end_matches('…').ends_with(' '),
+            "expected no trailing whitespace before ellipsis: {:?}",
+            excerpt
+        );
+    }
+
+    #[test]
+    fn recent_excerpt_is_none_when_no_assistant_turns() {
+        let user = r#"{"uuid":"u1","type":"user","message":{"content":"hello"}}"#;
+        let s = parse_session(&pp(), &format!("{}\n", user));
+        assert!(s.recent_excerpt.is_none());
     }
 }
