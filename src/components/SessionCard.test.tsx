@@ -132,10 +132,10 @@ describe("SessionCard", () => {
     expect(screen.getByRole("button", { name: /attach/i })).toBeInTheDocument();
   });
 
-  it("calls api.openSession with cwd + session id when Open is clicked", () => {
+  it("calls api.openSession with cwd + session id when Open is clicked on an inactive session", () => {
     render(
       <SessionCard
-        session={makeSession({ id: "sess-99" })}
+        session={makeSession({ id: "sess-99", live_status: null })}
         cwd="/repo"
         projectUsed1m={false}
         isPinned={false}
@@ -145,6 +145,21 @@ describe("SessionCard", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /open session/i }));
     expect(api.openSession).toHaveBeenCalledWith("/repo", "sess-99");
+  });
+
+  it("shows 'Already open' text (no Open button) when the session is live", () => {
+    render(
+      <SessionCard
+        session={makeSession({ live_status: "idle" })}
+        cwd="/repo"
+        projectUsed1m={false}
+        isPinned={false}
+        focused={false}
+        onMutate={() => {}}
+      />,
+    );
+    expect(screen.getByText(/already open/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open session/i })).toBeNull();
   });
 
   it("kebab → Pin calls api.pinSession", () => {
