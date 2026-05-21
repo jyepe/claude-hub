@@ -132,7 +132,7 @@ describe("SessionCard", () => {
     expect(screen.getByRole("button", { name: /attach/i })).toBeInTheDocument();
   });
 
-  it("calls api.openSession with cwd + session id when Open is clicked on an idle session", () => {
+  it("calls api.openSession with cwd + session id when Open is clicked on an inactive session", () => {
     render(
       <SessionCard
         session={makeSession({ id: "sess-99", live_status: null })}
