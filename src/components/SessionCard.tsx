@@ -222,6 +222,10 @@ export function SessionCard({
           >
             Attach →
           </button>
+        ) : isLive ? (
+          <span className="text-text-3 text-[13px] whitespace-nowrap ml-3">
+            Already open
+          </span>
         ) : (
           <button
             type="button"
